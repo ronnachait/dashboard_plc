@@ -3,11 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"ts-node server.ts\"",
+    "dev": "next dev",
     "build": "next build",
-    "start": "node dist/server.js",
-    "postinstall": "patch-package",
-    "lint": "eslint"
+    "start": "pm2-runtime ecosystem.config.js"
   },
   "engines": {
     "node": "20.x"

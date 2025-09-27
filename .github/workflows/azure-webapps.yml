@@ -3,33 +3,68 @@ name: Build and Deploy Next.js + WS server to Azure
 on:
   push:
     branches:
-      - master # หรือ main ถ้า repo ใช้ main
+      - master
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 📥 ดึงโค้ด
       - uses: actions/checkout@v4
 
+      # 🟢 ใช้ Node.js 20
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
+      # 📦 ลง dependencies
       - name: Install dependencies
         run: npm ci
 
+      # 🏗️ Build Next.js (standalone)
       - name: Build Next.js app
         run: npm run build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
 
-      - name: Package app
-        run: zip -r release.zip .next/ node_modules/ package.json next.config.js ecosystem.config.js ws-server.js
+      # 📂 เตรียมไฟล์สำหรับ deploy
+      - name: Prepare artifact
+        run: |
+          mkdir -p out-azure
 
+          # 1. standalone build
+          cp -R .next/standalone/* out-azure/
+
+          # 2. static assets
+          mkdir -p out-azure/.next
+          cp -R .next/static out-azure/.next/
+
+          # 3. public
+          if [ -d public ]; then cp -R public out-azure/; fi
+
+          # 4. prisma schema & client
+          if [ -d prisma ]; then cp -R prisma out-azure/; fi
+          if [ -d node_modules/.prisma ]; then
+            mkdir -p out-azure/node_modules
+            cp -R node_modules/.prisma out-azure/node_modules/
+          fi
+
+          # 5. runtime files
+          cp package.json next.config.js ecosystem.config.js ws-server.js out-azure/
+
+          # debug
+          echo "✅ Artifact prepared:"
+          ls -la out-azure
+
+      # 🚀 Deploy ไป Azure
       - name: Deploy to Azure WebApp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest # 👈 ใช้ชื่อ Web App ของเอส
-          slot-name: production
+          app-name: dashboard-benchtest
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
-          package: release.zip
+          package: out-azure
