@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"next dev\" \"ts-node server.ts\"",
-    "build": "next build && tsc server.ts --outDir dist",
+    "build": "next build",
     "start": "node dist/server.js",
+    "postinstall": "patch-package",
     "lint": "eslint"
   },
   "engines": {
@@ -47,12 +48,14 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20.19.17",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^18.3.24",
+    "@types/react-dom": "^18.3.7",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.5.3",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0",
     "prisma": "^6.16.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
