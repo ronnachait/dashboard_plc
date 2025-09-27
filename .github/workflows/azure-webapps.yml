@@ -54,10 +54,11 @@ jobs:
             cp -R node_modules/.prisma out-azure/node_modules/
           fi
 
-          # 5. runtime files (เช็คก่อน copy)
-          if [ -f package.json ]; then cp package.json out-azure/; fi
-          if [ -f ecosystem.config.js ]; then cp ecosystem.config.js out-azure/; fi
-          if [ -f ws-server.js ]; then cp ws-server.js out-azure/; fi
+          # 5. runtime files
+          cp package.json package-lock.json ecosystem.config.js ws-server.js out-azure/
+
+          # 6. ✅ copy node_modules ทั้งหมด (fix ws/express missing)
+          cp -R node_modules out-azure/
 
           echo "✅ Artifact prepared:"
           ls -la out-azure
