@@ -54,15 +54,11 @@ jobs:
             cp -R node_modules/.prisma out-azure/node_modules/
           fi
 
-          # 5. runtime files
-          cp package.json server-custom.js ws-server.js ecosystem.config.js out-azure/
+          # 5. runtime files (ไม่เอา ws-server.js แล้ว)
+          cp package.json server-custom.js ecosystem.config.js out-azure/
 
-          # 6. ✅ copy เฉพาะ dependencies ที่ server-custom.js ใช้
-          mkdir -p out-azure/node_modules
-          cp -R node_modules/ws out-azure/node_modules/ws
-          cp -R node_modules/express out-azure/node_modules/express
-          cp -R node_modules/jsmodbus out-azure/node_modules/jsmodbus
-          cp -R node_modules/net out-azure/node_modules/net
+          # 6. ✅ copy node_modules ที่จำเป็น (ง่ายสุดคือยกไปทั้งก้อน)
+          cp -R node_modules out-azure/
 
           echo "✅ Artifact prepared:"
           ls -la out-azure
