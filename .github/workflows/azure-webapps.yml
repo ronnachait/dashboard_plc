@@ -1,16 +1,16 @@
-name: Build and Deploy Next.js to Azure
+name: Build and Deploy Next.js + WS server to Azure
 
 on:
   push:
     branches:
-      - master
+      - master # หรือ main ถ้า repo ใช้ main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -20,16 +20,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
+      - name: Build Next.js app
         run: npm run build
 
-      - name: Zip build output
-        run: zip -r release.zip .next/ ecosystem.config.js ws-server.js package.json node_modules/ next.config.js
+      - name: Package app
+        run: zip -r release.zip .next/ node_modules/ package.json next.config.js ecosystem.config.js ws-server.js
 
       - name: Deploy to Azure WebApp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest # 👈 ชื่อ webapp ของเอส
+          app-name: dashboard-benchtest # 👈 ใช้ชื่อ Web App ของเอส
           slot-name: production
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
