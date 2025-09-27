@@ -20,9 +20,9 @@ jobs:
         with:
           node-version: 20
 
-      # 📦 ติดตั้ง dependencies
+        # 📦 ติดตั้ง dependencies
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       # 🏗️ Build Next.js (standalone)
       - name: Build Next.js app

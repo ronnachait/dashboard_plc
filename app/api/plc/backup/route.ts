@@ -3,8 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { toZonedTime, format as formatTz } from "date-fns-tz";
 
+// ✅ หาตัว type ของ PlcLog อัตโนมัติจาก Prisma
+type PlcLog = Awaited<ReturnType<typeof prisma.plcLog.findMany>>[number];
+
 export async function GET() {
-  const logs = await prisma.plcLog.findMany({
+  const logs: PlcLog[] = await prisma.plcLog.findMany({
     orderBy: { createdAt: "asc" },
   });
 
@@ -54,11 +57,10 @@ export async function GET() {
       ...pressures,
       ...temps,
       log.action,
-      `"${log.reason || ""}"`, // 👈 ครอบ reason กันแตก column
+      `"${log.reason || ""}"`,
     ].join(",");
   });
 
-  // ✅ ใส่ BOM ให้ Excel อ่าน UTF-8 ถูกต้อง
   const csv = "\uFEFF" + [header.join(","), ...rows].join("\n");
 
   return new NextResponse(csv, {
