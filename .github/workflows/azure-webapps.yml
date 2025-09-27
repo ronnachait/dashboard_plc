@@ -55,7 +55,7 @@ jobs:
           fi
 
           # 5. runtime files
-          cp package.json package-lock.json ecosystem.config.js ws-server.js out-azure/
+           cp package.json ecosystem.config.js server-custom.js out-azure/
 
           # 6. ✅ copy node_modules ทั้งหมด (fix ws/express missing)
           cp -R node_modules out-azure/

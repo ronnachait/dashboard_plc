@@ -11,11 +11,11 @@ module.exports = {
       },
     },
     {
-      name: "ws-server",
-      script: "./ws-server.js",
+      name: "dashboard",
+      script: "server-custom.js",
       env: {
         NODE_ENV: "production",
-        PORT: process.env.WS_PORT || 8090, // ถ้าอยาก fix port
+        PORT: process.env.PORT || 3000,
       },
     },
   ],
