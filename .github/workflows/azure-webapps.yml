@@ -61,7 +61,6 @@ jobs:
           mkdir -p out-azure/node_modules
           cp -R node_modules/ws out-azure/node_modules/ws
           cp -R node_modules/express out-azure/node_modules/express
-          cp -R node_modules/cors out-azure/node_modules/cors
           cp -R node_modules/jsmodbus out-azure/node_modules/jsmodbus
           cp -R node_modules/net out-azure/node_modules/net
 
