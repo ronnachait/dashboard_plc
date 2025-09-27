@@ -1,62 +1,65 @@
-// server-custom.js
 import { createServer } from "http";
+import express from "express";
 import next from "next";
 import { WebSocketServer } from "ws";
-import express from "express";
 
 const dev = process.env.NODE_ENV !== "production";
+const port = process.env.PORT || 3000;
+
+// ✅ Init Next.js
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const port = process.env.PORT || 3000;
+async function start() {
+  await app.prepare();
 
-app.prepare().then(() => {
-  const expressApp = express();
-  const server = createServer(expressApp);
+  // ✅ Express server
+  const server = express();
 
-  // ✅ WebSocket server share port
-  const wss = new WebSocketServer({ server });
+  // 🔗 Next.js routes
+  server.all("*", (req, res) => handle(req, res));
+
+  // ✅ สร้าง HTTP server ร่วม
+  const httpServer = createServer(server);
+
+  // ✅ Attach WebSocket ไปที่ server เดียวกัน
+  const wss = new WebSocketServer({ server: httpServer });
+
   const clients = new Set();
 
   wss.on("connection", (ws) => {
     clients.add(ws);
-    console.log("🔌 WS connected:", clients.size);
+    console.log("🔌 WS client connected, total:", clients.size);
 
     ws.on("message", (msg) => {
       try {
         const data = JSON.parse(msg.toString());
-        console.log("📨 WS msg:", data);
+        console.log("📨 WS received:", data);
 
-        // broadcast to all
-        for (const c of clients) {
-          if (c.readyState === 1) c.send(JSON.stringify(data));
-        }
+        // broadcast กลับไปทุก client
+        const payload = JSON.stringify(data);
+        clients.forEach((client) => {
+          if (client.readyState === 1) client.send(payload);
+        });
       } catch (err) {
-        console.error("❌ Invalid WS message:", err.message);
+        console.error("❌ WS parse error:", err.message);
       }
     });
 
     ws.on("close", () => {
       clients.delete(ws);
-      console.log("❌ WS disconnected:", clients.size);
+      console.log("❌ WS client disconnected, total:", clients.size);
     });
   });
 
-  // ✅ HTTP relay endpoint (แทน 8091 เดิม)
-  expressApp.use(express.json());
-  expressApp.post("/broadcast", (req, res) => {
-    const { event, payload } = req.body;
-    const msg = JSON.stringify({ event, payload });
-    for (const c of clients) {
-      if (c.readyState === 1) c.send(msg);
-    }
-    res.json({ ok: true });
-  });
-
-  // ✅ Next.js handle
-  expressApp.all("*", (req, res) => handle(req, res));
-
-  server.listen(port, () => {
+  // ✅ Start server
+  httpServer.listen(port, () => {
     console.log(`🚀 Server ready on http://localhost:${port}`);
+    console.log(`🔗 WS ready on ws://localhost:${port}`);
   });
+}
+
+start().catch((err) => {
+  console.error("❌ Server failed:", err);
+  process.exit(1);
 });

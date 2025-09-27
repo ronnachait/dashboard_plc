@@ -55,10 +55,15 @@ jobs:
           fi
 
           # 5. runtime files
-           cp package.json ecosystem.config.js server-custom.js out-azure/
+          cp package.json server-custom.js ws-server.js out-azure/
 
-          # 6. ✅ copy node_modules ทั้งหมด (fix ws/express missing)
-          cp -R node_modules out-azure/
+          # 6. ✅ copy only needed node_modules
+          mkdir -p out-azure/node_modules
+          cp -R node_modules/ws out-azure/node_modules/ws
+          cp -R node_modules/express out-azure/node_modules/express
+          cp -R node_modules/cors out-azure/node_modules/cors
+          cp -R node_modules/jsmodbus out-azure/node_modules/jsmodbus
+          cp -R node_modules/net out-azure/node_modules/net
 
           echo "✅ Artifact prepared:"
           ls -la out-azure
