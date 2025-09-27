@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 📥 ดึงโค้ดจาก GitHub
+      # 📥 ดึงโค้ด
       - uses: actions/checkout@v4
 
-      # 🟢 ใช้ Node.js 20
+      # 🟢 Node.js 20
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 🏗️ Build Next.js (standalone mode)
+      # 🏗️ Build Next.js (standalone)
       - name: Build Next.js app
         run: npm run build
         env:
@@ -32,7 +32,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PI_API_KEY: ${{ secrets.PI_API_KEY }}
 
-      # 📂 เตรียมไฟล์สำหรับ Deploy
+      # 📂 เตรียมไฟล์ deploy
       - name: Prepare artifact
         run: |
           mkdir -p out-azure
@@ -47,18 +47,11 @@ jobs:
           # 3. public
           if [ -d public ]; then cp -R public out-azure/; fi
 
-          # 4. prisma schema & client
+          # 4. prisma schema
           if [ -d prisma ]; then cp -R prisma out-azure/; fi
-          if [ -d node_modules/.prisma ]; then
-            mkdir -p out-azure/node_modules
-            cp -R node_modules/.prisma out-azure/node_modules/
-          fi
 
-          # 5. runtime files (ไม่เอา ws-server.js แล้ว)
-          cp package.json server-custom.js ecosystem.config.js out-azure/
-
-          # 6. ✅ copy node_modules ที่จำเป็น (ง่ายสุดคือยกไปทั้งก้อน)
-          cp -R node_modules out-azure/
+          # 5. runtime files (แค่พวกนี้พอ)
+          cp package.json server-custom.js out-azure/
 
           echo "✅ Artifact prepared:"
           ls -la out-azure
