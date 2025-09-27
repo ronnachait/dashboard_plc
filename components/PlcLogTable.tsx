@@ -1,0 +1,197 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+
+export type PlcLog = {
+  id: string;
+  createdAt: string;
+  pressure: number[];
+  temperature: number[];
+  action: "OK" | "STOP" | string;
+  reason?: string | null;
+};
+
+export function PlcLogTable({
+  logs,
+  loading,
+}: {
+  logs: PlcLog[];
+  loading: boolean;
+}) {
+  return (
+    <TooltipProvider>
+      <div className="max-h-[500px] overflow-y-auto rounded-xl border border-slate-200 shadow-lg bg-white relative">
+        <table className="w-full text-sm border-collapse">
+          {/* Header */}
+          <thead className="sticky top-0 bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow-md z-10">
+            <tr>
+              <th className="px-4 py-3 text-left">ID</th>
+              <th className="px-4 py-3 text-left">Time</th>
+              {Array.from({ length: 3 }, (_, i) => (
+                <th key={i} className="px-4 py-3 text-center">
+                  P{i + 1} <span className="text-[11px]">(bar)</span>
+                </th>
+              ))}
+              {Array.from({ length: 6 }, (_, i) => (
+                <th key={i} className="px-4 py-3 text-center">
+                  T{i + 1} <span className="text-[11px]">(°C)</span>
+                </th>
+              ))}
+              <th className="px-4 py-3 text-center">Action</th>
+              <th className="px-4 py-3 text-left">Reason</th>
+            </tr>
+          </thead>
+
+          {/* Body */}
+          <tbody>
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={12}
+                  className="text-center py-8 text-slate-500 italic"
+                >
+                  กำลังโหลดข้อมูล...
+                </td>
+              </tr>
+            ) : logs.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={12}
+                  className="text-center py-8 text-slate-400 italic"
+                >
+                  ไม่มีข้อมูลในช่วงเวลาที่เลือก
+                </td>
+              </tr>
+            ) : (
+              logs.map((l, i) => {
+                const reasons = l.reason
+                  ? l.reason.split(",").map((r: string) => r.trim())
+                  : [];
+
+                return (
+                  <tr
+                    key={i}
+                    className={`transition ${
+                      i % 2 === 0 ? "bg-slate-50/60" : "bg-white"
+                    } hover:bg-sky-50 hover:shadow-md`}
+                  >
+                    <td className="px-4 py-2 font-mono text-slate-700">
+                      {l.id}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-slate-600">
+                      {new Date(l.createdAt).toLocaleString("th-TH")}
+                    </td>
+
+                    {/* Pressure */}
+                    {l.pressure.map((p: number, j: number) => {
+                      const sensor = `P${j + 1}`;
+                      const reasonMatch = reasons.find((r) =>
+                        r.startsWith(sensor)
+                      );
+                      const isAlarm = Boolean(reasonMatch);
+                      return (
+                        <td key={j} className="px-4 py-2 text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={`inline-block px-2 py-1 rounded-full font-mono text-xs min-w-[55px] transition ${
+                                  isAlarm
+                                    ? "bg-gradient-to-br from-red-500 to-red-700 text-white shadow-md animate-pulse"
+                                    : "bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {p.toFixed(2)}
+                              </span>
+                            </TooltipTrigger>
+                            {isAlarm && (
+                              <TooltipContent>
+                                <p className="text-xs text-red-600">
+                                  {reasonMatch}
+                                </p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </td>
+                      );
+                    })}
+
+                    {/* Temperature */}
+                    {l.temperature.map((t: number, j: number) => {
+                      const sensor = `T${j + 1}`;
+                      const reasonMatch = reasons.find((r) =>
+                        r.startsWith(sensor)
+                      );
+                      const isAlarm = Boolean(reasonMatch);
+                      return (
+                        <td key={j} className="px-4 py-2 text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={`inline-block px-2 py-1 rounded-full font-mono text-xs min-w-[55px] transition ${
+                                  isAlarm
+                                    ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-md animate-pulse"
+                                    : "bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {t.toFixed(1)}
+                              </span>
+                            </TooltipTrigger>
+                            {isAlarm && (
+                              <TooltipContent>
+                                <p className="text-xs text-orange-600">
+                                  {reasonMatch}
+                                </p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </td>
+                      );
+                    })}
+
+                    {/* Action */}
+                    <td
+                      className={`px-4 py-2 text-center font-bold tracking-wide ${
+                        l.action === "OK"
+                          ? "text-green-600"
+                          : l.action === "STOP"
+                          ? "text-red-600"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      {l.action}
+                    </td>
+
+                    {/* Reason badges */}
+                    <td className="px-4 py-2">
+                      {reasons.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {reasons.map((r, idx) => (
+                            <span
+                              key={idx}
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-medium shadow-sm ${
+                                r.startsWith("T")
+                                  ? "bg-gradient-to-r from-orange-200 to-orange-300 text-orange-800"
+                                  : "bg-gradient-to-r from-red-200 to-red-300 text-red-800"
+                              }`}
+                            >
+                              {r}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </TooltipProvider>
+  );
+}

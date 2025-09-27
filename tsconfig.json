@@ -13,6 +13,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    "types": ["chart.js", "node"],
     "plugins": [
       {
         "name": "next"
@@ -22,6 +23,14 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "lib/plc-mock-server.js",
+    "types/**/*.d.ts",
+    "prisma/seed.js"
+  ],
   "exclude": ["node_modules"]
 }
