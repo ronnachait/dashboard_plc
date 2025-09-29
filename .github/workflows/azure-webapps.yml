@@ -42,9 +42,9 @@ jobs:
           cp -r .next release/.next
           cp -r public release/public
           cp package.json release/
+          cp package-lock.json release/
           cp server.js release/
           cd release && zip -r ../release.zip .
-
       # 🚀 Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
