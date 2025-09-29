@@ -44,6 +44,10 @@ jobs:
           cp server-custom.js release/
           cd release && zip -r ../release.zip .
 
+      - name: Debug publish profile
+        run: |
+          echo "${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}" | head -20
+
       # 🚀 Deploy to Azure Web App (ZipDeploy)
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
