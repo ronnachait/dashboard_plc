@@ -36,16 +36,17 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
       # 📦 Prepare release
-      - name: Archive production artifact
-        run: |
-          mkdir -p release
-          cp -r .next release/.next
-          cp -r public release/public
-          cp package.json release/
-          cp package-lock.json release/
-          cp server.js release/
-          cp -r node_modules release/node_modules
-          cd release && zip -r ../release.zip .
+        - name: Archive production artifact
+          run: |
+            mkdir -p release/.next
+            cp -r .next/standalone/* release/
+            cp -r .next/static release/.next/static
+            cp -r public release/public
+            cp package.json release/
+            cp package-lock.json release/
+            cp server.js release/
+            cd release && zip -r ../release.zip .
+
       # 🚀 Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
