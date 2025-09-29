@@ -3,7 +3,7 @@ name: Build and Deploy Next.js App to Azure Web App
 on:
   push:
     branches:
-      - master # 👈 deploy เมื่อ push ไป master
+      - master
   workflow_dispatch:
 
 jobs:
@@ -12,55 +12,49 @@ jobs:
 
     steps:
       # 📥 Checkout source code
-      - name: Checkout GitHub Actions
+      - name: Checkout
         uses: actions/checkout@v4
 
       # ⚙️ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20.x"
           cache: "npm"
 
       # 🧹 Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 🔧 Prisma generate (ถ้ามีใช้)
-      - name: Prisma generate
-        run: npx prisma generate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      # 🏗️ Build Next.js (standalone)
-      - name: Build Next.js app
+      # 🏗️ Build Next.js
+      - name: Build Next.js
         run: npm run build
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
-      # 📦 Prepare release artifact
+      # 📦 Prepare release
       - name: Archive production artifact
         run: |
-          mkdir -p release/.next
-          cp -r .next/standalone/* release/
-          cp -r .next/static release/.next/static
+          mkdir -p release
+          cp -r .next release/.next
           cp -r public release/public
           cp package.json release/
-          cp server-custom.js release/   # ✅ copy มาด้วย
+          cp server.js release/
           cd release && zip -r ../release.zip .
 
-      # 🚀 Deploy to Azure Web App (ZipDeploy)
+      # 🚀 Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest # 👈 จาก msdeploySite
-          slot-name: production # 👈 ต้องใช้ production
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE_ZIP }}
+          app-name: dashboard-benchtest
+          slot-name: production
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 🩺 Health check หลัง deploy
+      # 🩺 Health check
       - name: Verify health endpoint
         run: |
           echo "⏳ Checking health endpoint..."
