@@ -1,12 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext",
-      "ESNext.AsyncIterable"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext", "ESNext.AsyncIterable"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -21,19 +16,15 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "types": [
-      "chart.js",
-      "node"
-    ],
+    "types": ["chart.js", "node"],
     "plugins": [
       {
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -46,8 +37,5 @@
     "types/**/*.d.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    ".next"
-  ]
+  "exclude": ["node_modules", ".next"]
 }

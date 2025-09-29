@@ -15,6 +15,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ✅ Pre-build check: verify imports vs filesystem
+      - name: Verify component imports
+        run: |
+          echo "🔎 Checking imported components exist..."
+          for FILE in $(grep -RohE "from ['\"]@/components/[^'\"]+" . | sed "s/.*@\/components\///"); do
+            if [ ! -f "components/$FILE.tsx" ] && [ ! -f "components/$FILE.jsx" ]; then
+              echo "❌ Missing component file: components/$FILE.tsx"
+              exit 1
+            fi
+          done
+          echo "✅ All imports found!"
+
       # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,46 +51,26 @@ jobs:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 6. Archive everything needed for runtime
+      # 6. Archive runtime files
       - name: Archive production artifact
         run: |
           mkdir -p release
-          # build output
           cp -r .next release/.next
-          # static assets
           cp -r public release/public || true
-          # app/pages source
           cp -r app release/app || true
           cp -r pages release/pages || true
-          # shared source
           cp -r components release/components || true
           cp -r lib release/lib || true
           cp -r hooks release/hooks || true
           cp -r types release/types || true
-          # configs
           cp next.config.js release/ || true
-          # prisma schema
           cp -r prisma release/prisma || true
-          # package info
           cp package.json release/
           cp package-lock.json release/
-          # custom server
           cp server.js release/
-
-      # ✅ Debug: list files we copied
-      - name: Debug copied files
-        run: |
-          echo "==== RELEASE CONTENTS ===="
-          ls -R release | grep FloatingMenuWrapper || true
-          echo "=========================="
-          ls -R release/components || true
-
-      # 7. Zip for deploy
-      - name: Create release.zip
-        run: |
           cd release && zip -r ../release.zip .
 
-      # 8. Deploy to Azure
+      # 7. Deploy
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
@@ -86,7 +78,7 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 9. Health check
+      # 8. Health check
       - name: Verify health endpoint
         run: |
           echo "⏳ Checking health endpoint..."
