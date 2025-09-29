@@ -38,7 +38,7 @@ jobs:
         run: |
           mkdir -p release
           cp -r .next/standalone/* release/
-          cp -r .next/static release/.next/static
+          cp -r .next/static release/.next/static || true
           cp -r public release/public || true
           cp -r prisma release/prisma || true
           cp next.config.js release/ || true
