@@ -44,6 +44,7 @@ jobs:
           cp package.json release/
           cp package-lock.json release/
           cp server.js release/
+          cp -r node_modules release/node_modules
           cd release && zip -r ../release.zip .
       # 🚀 Deploy to Azure
       - name: Deploy to Azure Web App
