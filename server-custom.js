@@ -20,6 +20,11 @@ async function start() {
     // ✅ Express server
     const server = express();
 
+    // 🩺 Health Check endpoint
+    server.get("/healthz", (req, res) => {
+      res.status(200).send("ok");
+    });
+
     // 🔗 Next.js routes
     server.all("*", (req, res) => handle(req, res));
 

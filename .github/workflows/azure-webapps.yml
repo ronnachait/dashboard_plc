@@ -14,7 +14,7 @@ jobs:
       - name: Checkout GitHub Actions
         uses: actions/checkout@v4
 
-      # ⚙️ Setup Node.js (matchกับ package.json → 20.x)
+      # ⚙️ Setup Node.js (ตาม package.json → 20.x)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,22 +33,22 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PI_API_KEY: ${{ secrets.PI_API_KEY }}
 
-      # 📦 Zip build artifact (รวม .next/standalone + public + .next/static)
+      # 📦 Prepare release folder (รวมทุกอย่างที่ต้องใช้ runtime)
       - name: Archive production artifact
         run: |
-          mkdir -p release
+          mkdir -p release/.next
           cp -r .next/standalone/* release/
           cp -r .next/static release/.next/static
           cp -r public release/public
           cp package.json release/
-          cp server-custom.js release/   # 👈 custom server
+          cp server-custom.js release/
           cd release && zip -r ../release.zip .
 
       # 🚀 Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: dashboard-plc # 👈 ชื่อ Web App
+          app-name: dashboard-plc # 👈 ใส่ชื่อ Web App ของคุณ
           slot-name: production
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
