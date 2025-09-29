@@ -41,12 +41,13 @@ jobs:
 
       - name: Archive production artifact
         run: |
-          mkdir -p release
-          if [ -d ".next/standalone" ]; then
+          mkdir -p release/.next
+          # ✅ copy standalone (ต้องมีหลัง build)
           cp -r .next/standalone release/.next/standalone
-          fi
           cp -r .next/static release/.next/static
           cp -r public release/public || true
+          cp -r prisma release/prisma || true
+          cp next.config.js release/ || true
           cp package.json release/
           cp package-lock.json release/
           cd release && zip -r ../release.zip .
