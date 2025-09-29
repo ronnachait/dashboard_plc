@@ -39,23 +39,22 @@ jobs:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 6. Debug build output
-      - name: Debug build output
-        run: ls -R .next
-
-      # 7. Prepare release
+      # 6. Prepare release
       - name: Archive production artifact
         run: |
-          mkdir -p release
-          cp -r .next release/.next
+          mkdir -p release/.next
+          cp -r .next/* release/.next/
           cp -r public release/public
           cp package.json release/
           cp package-lock.json release/
           cp server.js release/
-          cp -r node_modules release/node_modules
           cd release && zip -r ../release.zip .
 
-      # 8. Deploy to Azure
+      # 🕵 Debug: list files inside release.zip
+      - name: Debug release contents
+        run: unzip -l release.zip
+
+      # 7. Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
@@ -63,7 +62,7 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 9. Health check
+      # 8. Health check
       - name: Verify health endpoint
         run: |
           echo "⏳ Checking health endpoint..."
