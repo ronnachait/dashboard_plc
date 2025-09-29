@@ -3,7 +3,7 @@ name: Build and Deploy Next.js App to Azure Web App
 on:
   push:
     branches:
-      - master # 👈 deploy ทุกครั้งที่ push ไป master
+      - master # 👈 deploy เมื่อ push ไป branch master
 
 jobs:
   build-and-deploy:
@@ -14,14 +14,14 @@ jobs:
       - name: Checkout GitHub Actions
         uses: actions/checkout@v4
 
-      # ⚙️ Setup Node.js (20.x ตาม package.json)
+      # ⚙️ Setup Node.js (ตาม package.json → 20.x)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "npm"
 
-      # 🧹 Install dependencies
+      # 🧹 Install dependencies (ใช้ lockfile เดิม)
       - name: Install dependencies
         run: npm ci
 
@@ -33,7 +33,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PI_API_KEY: ${{ secrets.PI_API_KEY }}
 
-      # 📦 Prepare release folder (runtime + static)
+      # 📦 Prepare release artifact (รวม runtime + static + server-custom.js)
       - name: Archive production artifact
         run: |
           mkdir -p release/.next
@@ -44,11 +44,27 @@ jobs:
           cp server-custom.js release/
           cd release && zip -r ../release.zip .
 
-      # 🚀 Deploy using ZipDeploy profile
+      # 🚀 Deploy to Azure Web App (ZipDeploy)
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest # 👈 มาจาก msdeploySite
+          app-name: dashboard-benchtest # 👈 จาก msdeploySite ใน PublishSettings
           slot-name: default # 👈 ไม่มี slotName → ใช้ default
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
+
+      # 🩺 Health check หลัง deploy
+      - name: Verify health endpoint
+        run: |
+          echo "⏳ Checking health endpoint..."
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://dashboard-benchtest.azurewebsites.net/healthz || true)
+            if [ "$STATUS" == "200" ]; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            echo "Retrying... ($i)"
+            sleep 10
+          done
+          echo "❌ Health check failed!"
+          exit 1
