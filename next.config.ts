@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone", // 👈 ให้ build เป็น standalone
+  output: "standalone",
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

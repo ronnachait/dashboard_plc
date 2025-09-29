@@ -28,11 +28,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
       - name: Build Next.js app
         run: npm run build
         env:
@@ -42,7 +37,6 @@ jobs:
       - name: Archive production artifact
         run: |
           mkdir -p release/.next
-          # ✅ copy standalone (ต้องมีหลัง build)
           cp -r .next/standalone release/.next/standalone
           cp -r .next/static release/.next/static
           cp -r public release/public || true
