@@ -50,15 +50,20 @@ jobs:
           # app/pages source
           cp -r app release/app || true
           cp -r pages release/pages || true
+          # shared source
+          cp -r components release/components || true
+          cp -r lib release/lib || true
+          cp -r hooks release/hooks || true
+          cp -r types release/types || true
           # configs
           cp next.config.js release/ || true
+          # prisma schema
+          cp -r prisma release/prisma || true
           # package info
           cp package.json release/
           cp package-lock.json release/
           # custom server
           cp server.js release/
-          # prisma schema (ถ้ามี)
-          cp -r prisma release/prisma || true
           # zip ทั้งหมด
           cd release && zip -r ../release.zip .
 
