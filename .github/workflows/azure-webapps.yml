@@ -42,7 +42,9 @@ jobs:
       - name: Archive production artifact
         run: |
           mkdir -p release
+          if [ -d ".next/standalone" ]; then
           cp -r .next/standalone release/.next/standalone
+          fi
           cp -r .next/static release/.next/static
           cp -r public release/public || true
           cp package.json release/
