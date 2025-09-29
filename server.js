@@ -3,6 +3,8 @@ import express from "express";
 import next from "next";
 import { WebSocketServer } from "ws";
 
+console.log("📦 Server.js loaded, starting..."); // ✅ Debug log บรรทัดแรก
+
 const dev = process.env.NODE_ENV !== "production";
 const port = process.env.PORT || 3000;
 
@@ -14,19 +16,22 @@ const handle = app.getRequestHandler();
 const clients = new Set();
 
 async function start() {
+  console.log("⚡ Preparing Next.js app..."); // ✅ Debug log
   await app.prepare();
 
   const expressApp = express();
   expressApp.use(express.json());
 
-  // ✅ Health check (เอาไว้ให้ workflow ping ได้)
+  // ✅ Health check (workflow ใช้ ping)
   expressApp.get("/healthz", (req, res) => {
+    console.log("💚 Health check hit"); // ✅ Debug log
     res.status(200).send("ok");
   });
 
   // ✅ Relay endpoint
   expressApp.post("/broadcast", (req, res) => {
     const { event, payload } = req.body;
+    console.log("📨 HTTP broadcast:", { event, payload }); // ✅ Debug log
     broadcast(event, payload);
     res.json({ ok: true });
   });
@@ -60,6 +65,7 @@ async function start() {
 
   function broadcast(event, payload) {
     const msg = JSON.stringify({ event, payload });
+    console.log("📡 Broadcasting:", msg); // ✅ Debug log
     clients.forEach((c) => {
       if (c.readyState === 1) c.send(msg);
     });
@@ -71,4 +77,7 @@ async function start() {
   });
 }
 
-start();
+start().catch((err) => {
+  console.error("🔥 Fatal server error:", err);
+  process.exit(1);
+});

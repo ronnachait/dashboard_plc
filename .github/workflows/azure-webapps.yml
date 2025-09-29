@@ -38,14 +38,16 @@ jobs:
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
-      # 6. Prepare release (include .next + server.js + node_modules)
+      # 6. Debug build output
+      - name: Debug build output
+        run: ls -R .next
+
+      # 7. Prepare release
       - name: Archive production artifact
         run: |
-          mkdir -p release/.next
-          cp -r .next/* release/.next/
+          mkdir -p release
+          cp -r .next release/.next
           cp -r public release/public
           cp package.json release/
           cp package-lock.json release/
@@ -53,15 +55,15 @@ jobs:
           cp -r node_modules release/node_modules
           cd release && zip -r ../release.zip .
 
-      # 7. Deploy to Azure
+      # 8. Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest # 👈 ชื่อ App Service
+          app-name: dashboard-benchtest
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 8. Health check
+      # 9. Health check
       - name: Verify health endpoint
         run: |
           echo "⏳ Checking health endpoint..."
