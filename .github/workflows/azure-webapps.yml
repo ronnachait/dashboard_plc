@@ -28,23 +28,41 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Build Next.js app
+      - name: Build Next.js app (standalone)
         run: npm run build
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Archive production artifact
+      - name: Prepare artifact
         run: |
-          mkdir -p release
-          cp -r .next/standalone/* release/
-          cp -r .next/static release/.next/static || true
-          cp -r public release/public || true
-          cp -r prisma release/prisma || true
-          cp next.config.js release/ || true
-          cp package.json release/
-          cp package-lock.json release/
-          cd release && zip -r ../release.zip .
+          set -eux
+          OUT="release"
+          mkdir -p "$OUT" "$OUT/.next"
+
+          # ✅ copy server bundle
+          cp -R .next/standalone/. "$OUT/"
+
+          # ✅ copy static assets
+          if [ -d ".next/static" ]; then
+            mkdir -p "$OUT/.next/static"
+            cp -R .next/static/. "$OUT/.next/static"
+          fi
+
+          # ✅ copy public assets
+          if [ -d "public" ]; then
+            cp -R public "$OUT/public"
+          fi
+
+          # ✅ copy prisma
+          if [ -d "prisma" ]; then
+            cp -R prisma "$OUT/prisma"
+          fi
+
+          # ✅ copy configs
+          cp package.json package-lock.json next.config.js "$OUT/"
+
+          cd "$OUT" && zip -r ../release.zip .
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
