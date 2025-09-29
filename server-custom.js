@@ -6,18 +6,14 @@ import { WebSocketServer } from "ws";
 const dev = process.env.NODE_ENV !== "production";
 const port = process.env.PORT || 3000;
 
-// ✅ ชี้ dir ให้ถูกต้องเวลา build (ใช้ .next/standalone ใน production)
-const dir = dev ? "." : __dirname;
-
-// ✅ Init Next.js
-const app = next({ dev, dir });
+// ✅ ใช้ root project เสมอ
+const app = next({ dev, dir: "." });
 const handle = app.getRequestHandler();
 
 async function start() {
   try {
     await app.prepare();
 
-    // ✅ Express server
     const server = express();
 
     // 🩺 Health Check endpoint
@@ -28,12 +24,9 @@ async function start() {
     // 🔗 Next.js routes
     server.all("*", (req, res) => handle(req, res));
 
-    // ✅ สร้าง HTTP server ร่วม
     const httpServer = createServer(server);
 
-    // ✅ Attach WebSocket ไปที่ server เดียวกัน
     const wss = new WebSocketServer({ server: httpServer });
-
     const clients = new Set();
 
     wss.on("connection", (ws) => {
@@ -45,7 +38,6 @@ async function start() {
           const data = JSON.parse(msg.toString());
           console.log("📨 WS received:", data);
 
-          // broadcast กลับไปทุก client
           const payload = JSON.stringify(data);
           clients.forEach((client) => {
             if (client.readyState === 1) client.send(payload);
@@ -61,7 +53,6 @@ async function start() {
       });
     });
 
-    // ✅ Start server
     httpServer.listen(port, () => {
       console.log(`🚀 Server ready on http://localhost:${port}`);
       console.log(`🔗 WS ready on ws://localhost:${port}`);

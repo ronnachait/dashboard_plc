@@ -48,7 +48,7 @@ jobs:
           cp -r .next/static release/.next/static
           cp -r public release/public
           cp package.json release/
-          cp server-custom.js release/
+          cp server-custom.js release/   # ✅ copy มาด้วย
           cd release && zip -r ../release.zip .
 
       # 🚀 Deploy to Azure Web App (ZipDeploy)
