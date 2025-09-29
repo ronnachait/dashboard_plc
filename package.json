@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node server-custom.js"
+    "start": "node .next/standalone/server-custom.js"
   },
   "engines": {
     "node": "20.x"
