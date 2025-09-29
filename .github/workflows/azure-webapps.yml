@@ -3,7 +3,7 @@ name: Build and Deploy Next.js App to Azure Web App
 on:
   push:
     branches:
-      - master
+      - master # 👈 deploy เมื่อ push ไป master
   workflow_dispatch:
 
 jobs:
@@ -22,37 +22,41 @@ jobs:
           node-version: "20.x"
           cache: "npm"
 
-      # 🧹 Install dependencies
+      # 📦 Install dependencies
       - name: Install dependencies
         run: npm ci
 
+      # 🔄 Prisma generate (ถ้าใช้)
+      - name: Prisma generate
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       # 🏗️ Build Next.js
-      - name: Build Next.js
+      - name: Build Next.js app
         run: npm run build
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
 
-      # 📦 Prepare release
-        - name: Archive production artifact
-          run: |
-            mkdir -p release/.next
-            cp -r .next/standalone/* release/
-            cp -r .next/static release/.next/static
-            cp -r public release/public
-            cp package.json release/
-            cp package-lock.json release/
-            cp server.js release/
-            cd release && zip -r ../release.zip .
+      # 📦 Archive production artifact
+      - name: Archive production artifact
+        run: |
+          mkdir -p release/.next
+          cp -r .next/standalone/* release/
+          cp -r .next/static release/.next/static
+          cp -r public release/public
+          cp package.json release/
+          cp package-lock.json release/
+          cp server.js release/
+          cd release && zip -r ../release.zip .
 
-      # 🚀 Deploy to Azure
+      # 🚀 Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: dashboard-benchtest
-          slot-name: production
+          app-name: dashboard-benchtest # 👈 ชื่อ App Service
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
