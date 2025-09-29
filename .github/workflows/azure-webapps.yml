@@ -1,9 +1,9 @@
-name: Build and Deploy Next.js App to Azure Web App
+name: Build and Deploy Next.js App with Custom Server
 
 on:
   push:
     branches:
-      - master # 👈 deploy เมื่อ push ไป master
+      - master
   workflow_dispatch:
 
 jobs:
@@ -11,48 +11,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 📥 Checkout source code
-      - name: Checkout
+      # 1. Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # ⚙️ Setup Node.js
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "npm"
 
-      # 📦 Install dependencies
+      # 3. Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 🔄 Prisma generate (ถ้าใช้)
+      # 4. Prisma generate (optional)
       - name: Prisma generate
         run: npx prisma generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 🏗️ Build Next.js
+      # 5. Build Next.js
       - name: Build Next.js app
         run: npm run build
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
-      # 📦 Archive production artifact
+      # 6. Prepare release (include .next + server.js + node_modules)
       - name: Archive production artifact
         run: |
           mkdir -p release/.next
-          cp -r .next/standalone/* release/
-          cp -r .next/static release/.next/static
+          cp -r .next/* release/.next/
           cp -r public release/public
           cp package.json release/
           cp package-lock.json release/
           cp server.js release/
+          cp -r node_modules release/node_modules
           cd release && zip -r ../release.zip .
 
-      # 🚀 Deploy to Azure Web App
+      # 7. Deploy to Azure
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
@@ -60,7 +61,7 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 🩺 Health check
+      # 8. Health check
       - name: Verify health endpoint
         run: |
           echo "⏳ Checking health endpoint..."
