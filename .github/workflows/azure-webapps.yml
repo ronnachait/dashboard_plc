@@ -1,4 +1,4 @@
-name: Build and Deploy Next.js App with Custom Server
+name: Build and Deploy Next.js App
 
 on:
   push:
@@ -11,66 +11,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout source
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Pre-build check: verify imports vs filesystem
-      - name: Verify component imports
-        run: |
-          echo "🔎 Checking imported components exist..."
-          for FILE in $(grep -RohE "from ['\"]@/components/[^'\"]+" . | sed "s/.*@\/components\///"); do
-            if [ ! -f "components/$FILE.tsx" ] && [ ! -f "components/$FILE.jsx" ]; then
-              echo "❌ Missing component file: components/$FILE.tsx"
-              exit 1
-            fi
-          done
-          echo "✅ All imports found!"
-
-      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "npm"
 
-      # 3. Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 4. Prisma generate
       - name: Prisma generate
         run: npx prisma generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 5. Build Next.js
+      - name: Run Prisma migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Build Next.js app
         run: npm run build
         env:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 6. Archive runtime files
       - name: Archive production artifact
         run: |
           mkdir -p release
-          cp -r .next release/.next
+          cp -r .next/standalone release/.next/standalone
+          cp -r .next/static release/.next/static
           cp -r public release/public || true
-          cp -r app release/app || true
-          cp -r pages release/pages || true
-          cp -r components release/components || true
-          cp -r lib release/lib || true
-          cp -r hooks release/hooks || true
-          cp -r types release/types || true
-          cp next.config.js release/ || true
           cp -r prisma release/prisma || true
+          cp next.config.js release/ || true
           cp package.json release/
           cp package-lock.json release/
-          cp server.js release/
           cd release && zip -r ../release.zip .
 
-      # 7. Deploy
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
@@ -78,12 +58,10 @@ jobs:
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
 
-      # 8. Health check
-      - name: Verify health endpoint
+      - name: Health check
         run: |
-          echo "⏳ Checking health endpoint..."
           for i in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://dashboard-benchtest.azurewebsites.net/healthz || true)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://dashboard-benchtest.azurewebsites.net/api/plc/status || true)
             if [ "$STATUS" == "200" ]; then
               echo "✅ Health check passed!"
               exit 0

@@ -63,29 +63,21 @@ export default function PlcDashboard() {
   });
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8090");
+    const evtSource = new EventSource("/api/plc/events");
 
-    ws.onmessage = (event) => {
+    evtSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.event === "COMMAND_DONE") {
-        console.log("Command finished:", data.payload);
+      if (data.type === "PLC_STATUS") {
+        setPlcStatus(data.payload.isRunning);
         setLoading(null);
-
-        toast.success(`คำสั่ง ${data.payload.command} เสร็จสิ้น`);
-        // หรือ notify("success", `✅ คำสั่ง ${data.payload.command} เสร็จสิ้น`);
-      }
-
-      if (data.event === "COMMAND_FAILED") {
-        console.error("❌ Command failed:", data.payload);
-        setLoading(null);
-
-        toast.error(`❌ คำสั่งล้มเหลว: ${data.payload.error}`);
-        // หรือ notify("error", `❌ คำสั่งล้มเหลว: ${data.payload.error}`);
+        toast.success(
+          data.payload.isRunning ? "✅ PLC Started" : "🛑 PLC Stopped"
+        );
       }
     };
 
-    return () => ws.close();
+    return () => evtSource.close();
   }, []);
 
   const handleClick = async (cmd: "SET" | "RST") => {
@@ -113,6 +105,7 @@ export default function PlcDashboard() {
 
       // ถ้าจะ refresh สถานะล่าสุดก็ fetch จาก DB
       await checkStatus();
+      setLoading(null);
     } catch (err) {
       console.error("❌ Error:", err);
     }

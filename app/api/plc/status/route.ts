@@ -1,19 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-// POST
 export async function POST(req: Request) {
-  try {
-    const { isRunning, alarm, reason } = await req.json();
-    await prisma.plcStatus.deleteMany({});
-    const status = await prisma.plcStatus.create({
-      data: { isRunning, alarm, reason },
-    });
-    return NextResponse.json({ success: true, status });
-  } catch (err: unknown) {
-    if (err instanceof Error)
-      return NextResponse.json({ error: "DB error" }, { status: 500 });
+  const { alarm, reason } = await req.json();
+
+  // ดึง status ปัจจุบัน
+  const current = await prisma.plcStatus.findFirst();
+
+  let isRunning = current?.isRunning ?? false;
+
+  if (alarm) {
+    // 🚨 ถ้ามี alarm → บังคับ stop
+    isRunning = false;
   }
+
+  const status = await prisma.plcStatus.upsert({
+    where: { id: current?.id ?? "plc-status-01" },
+    update: { isRunning, alarm, reason },
+    create: { id: "plc-status-01", isRunning, alarm, reason },
+  });
+
+  return Response.json({ success: true, status });
 }
 
 // GET
@@ -26,7 +32,7 @@ export async function GET() {
     if (!lastStatus) {
       return NextResponse.json({ error: "No status found" }, { status: 404 });
     }
-
+    console.log("lastStatus", lastStatus);
     return NextResponse.json(lastStatus);
   } catch (err: unknown) {
     if (err instanceof Error)

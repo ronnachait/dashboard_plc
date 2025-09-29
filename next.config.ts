@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone", // 👈 สำคัญสำหรับ Azure
+  output: "standalone", // 👈 ให้ build เป็น standalone
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
-      serialport: false, // 👈 บอก Webpack ว่าไม่ต้องหา module นี้
+      serialport: false,
+      fs: false,
+      net: false,
+      tls: false,
     };
     return config;
   },

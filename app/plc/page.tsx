@@ -1,7 +1,10 @@
-import PlcWrapper from "@/components/PlcWrapper";
+"use client";
 
-// 🚫 บังคับว่า runtime เท่านั้น ไม่ prerender
-export const dynamic = "force-dynamic";
+import dynamic from "next/dynamic";
+
+const PlcWrapper = dynamic(() => import("@/components/PlcWrapper"), {
+  ssr: false, // ปิด SSR ได้แล้ว
+});
 
 export default function Page() {
   return <PlcWrapper />;
