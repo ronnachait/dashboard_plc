@@ -41,20 +41,10 @@ jobs:
 
       - name: Archive production artifact
         run: |
-          mkdir -p release
-          # standalone server
-          if [ -d ".next/standalone" ]; then
-            cp -r .next/standalone release/.next/standalone
-          else
-            echo "⚠️ No standalone folder found!"
-          fi
-
-          # static files
-          if [ -d ".next/static" ]; then
-            cp -r .next/static release/.next/static
-          fi
-
-          # optional assets
+          mkdir -p release/.next
+          # ✅ copy standalone (ต้องมีหลัง build)
+          cp -r .next/standalone release/.next/standalone
+          cp -r .next/static release/.next/static
           cp -r public release/public || true
           cp -r prisma release/prisma || true
           cp next.config.js release/ || true
