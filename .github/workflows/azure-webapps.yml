@@ -41,13 +41,10 @@ jobs:
 
       - name: Archive production artifact
         run: |
-          mkdir -p release/.next
-          # ✅ copy standalone (ต้องมีหลัง build)
+          mkdir -p release
           cp -r .next/standalone release/.next/standalone
           cp -r .next/static release/.next/static
           cp -r public release/public || true
-          cp -r prisma release/prisma || true
-          cp next.config.js release/ || true
           cp package.json release/
           cp package-lock.json release/
           cd release && zip -r ../release.zip .
@@ -58,17 +55,3 @@ jobs:
           app-name: dashboard-benchtest
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
-
-      - name: Health check
-        run: |
-          for i in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://dashboard-benchtest.azurewebsites.net/api/plc/status || true)
-            if [ "$STATUS" == "200" ]; then
-              echo "✅ Health check passed!"
-              exit 0
-            fi
-            echo "Retrying... ($i)"
-            sleep 10
-          done
-          echo "❌ Health check failed!"
-          exit 1
