@@ -59,8 +59,10 @@ jobs:
             cp -R prisma "$OUT/prisma"
           fi
 
-          # ✅ copy configs
-          cp package.json package-lock.json next.config.js "$OUT/"
+          # ✅ copy configs (กันพลาดทั้ง .js / .ts)
+          cp package.json package-lock.json "$OUT/"
+          cp next.config.js "$OUT/" || true
+          cp next.config.ts "$OUT/" || true
 
           cd "$OUT" && zip -r ../release.zip .
 
