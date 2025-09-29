@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
+      # 1. Checkout source
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -39,20 +39,28 @@ jobs:
           NODE_ENV: production
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      # 6. Prepare release
+      # 6. Archive everything needed for runtime
       - name: Archive production artifact
         run: |
-          mkdir -p release/.next
-          cp -r .next/* release/.next/
-          cp -r public release/public
+          mkdir -p release
+          # build output
+          cp -r .next release/.next
+          # static assets
+          cp -r public release/public || true
+          # app/pages source
+          cp -r app release/app || true
+          cp -r pages release/pages || true
+          # configs
+          cp next.config.js release/ || true
+          # package info
           cp package.json release/
           cp package-lock.json release/
+          # custom server
           cp server.js release/
+          # prisma schema (ถ้ามี)
+          cp -r prisma release/prisma || true
+          # zip ทั้งหมด
           cd release && zip -r ../release.zip .
-
-      # 🕵 Debug: list files inside release.zip
-      - name: Debug release contents
-        run: unzip -l release.zip
 
       # 7. Deploy to Azure
       - name: Deploy to Azure Web App

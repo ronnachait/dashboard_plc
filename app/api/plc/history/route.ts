@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // 👈 ตรงนี้ต้องมีไฟล์ lib/prisma.ts
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
+    // 👇 Prisma จะ infer type ให้เอง
     const logs = await prisma.plcLog.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
 
-    // 🔄 แปลง Date → ISO string
-    const result = logs.map((l) => ({
+    // ✅ บอก TS ว่า l เป็น typeof logs[number]
+    const result = logs.map((l: (typeof logs)[number]) => ({
       ...l,
       createdAt: l.createdAt.toISOString(),
     }));

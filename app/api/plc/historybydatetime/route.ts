@@ -21,7 +21,10 @@ export async function GET(req: Request) {
   const endDate = new Date(end);
 
   const where: Prisma.PlcLogWhereInput = {
-    createdAt: { gte: startDate, lte: endDate },
+    createdAt: {
+      gte: startDate,
+      lte: endDate,
+    },
   };
 
   if (action) where.action = action as "OK" | "STOP";
