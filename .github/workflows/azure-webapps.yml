@@ -48,7 +48,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: dashboard-benchtest # 👈 ใส่ชื่อ Web App ของคุณ
-          slot-name: production
+          app-name: dashboard-benchtest # 👈 ชื่อ Web App ต้องตรงกับที่อยู่ใน Azure
+          slot-name: default # 👈 ถ้าไม่ได้สร้าง slot ให้ใช้ default
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
