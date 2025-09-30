@@ -5,7 +5,7 @@ export async function GET() {
   const latest = await prisma.plcLog.findFirst({
     orderBy: [
       { createdAt: "desc" },
-      { id: "desc" }, // 👈 กันกรณี createdAt เท่ากัน
+      { id: "desc" }, // กันกรณี createdAt เท่ากัน
     ],
   });
 
@@ -14,9 +14,10 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    id: latest.id + "-" + Date.now(), // 👈 ทำให้ unique เสมอ
+    id: latest.id, // ✅ ใช้ id จริงจาก DB
     pressure: latest.pressure,
     temperature: latest.temperature,
-    timestamp: latest.createdAt.toISOString(), // 👈 ใช้ ISO string
+    timestamp: latest.createdAt.toISOString(), // ISO string
+    fetchTime: Date.now(), // ✅ debug ได้ แต่ไม่ใช้เทียบ
   });
 }

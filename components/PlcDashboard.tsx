@@ -13,7 +13,7 @@ import {
   Legend,
 } from "chart.js";
 import zoomPlugin from "chartjs-plugin-zoom";
-import { Wifi, Activity, Loader2 } from "lucide-react";
+import { Wifi, Activity, Loader2, AlertTriangle } from "lucide-react";
 import SettingsSync from "./SettingsSync";
 import AlarmCard from "./AlarmCard";
 import SensorGauge from "./SensorGauge";
@@ -57,11 +57,16 @@ export default function PlcDashboard() {
   const [plcStatus, setPlcStatus] = useState<boolean | null>(null);
   const [buttonsDisabled, setButtonsDisabled] = useState(true);
   const [loading, setLoading] = useState<"SET" | "RST" | null>(null);
+  const staleCountRef = useRef(0);
+  const [plcNoResponse, setPlcNoResponse] = useState(false); // API ไม่ตอบ
+  const [plcStale, setPlcStale] = useState(false); // มีข้อมูลแต่ไม่เปลี่ยน
+
   const [alarm, setAlarm] = useState<{ active: boolean; reason: string }>({
     active: false,
     reason: "",
   });
 
+  // ✅ listen event จาก server
   useEffect(() => {
     const evtSource = new EventSource("/api/plc/events");
 
@@ -80,12 +85,12 @@ export default function PlcDashboard() {
     return () => evtSource.close();
   }, []);
 
+  // ✅ ส่งคำสั่ง
   const handleClick = async (cmd: "SET" | "RST") => {
     setLoading(cmd);
-    await sendCommand(cmd); // ยิง API เพื่อสร้าง command
+    await sendCommand(cmd);
   };
 
-  // 🔹 ส่งคำสั่งควบคุม
   const sendCommand = async (command: "SET" | "RST") => {
     try {
       const res = await fetch("/api/plc/command", {
@@ -103,7 +108,6 @@ export default function PlcDashboard() {
       const result = await res.json();
       console.log("✅ Command created:", result);
 
-      // ถ้าจะ refresh สถานะล่าสุดก็ fetch จาก DB
       await checkStatus();
       setLoading(null);
     } catch (err) {
@@ -111,27 +115,33 @@ export default function PlcDashboard() {
     }
   };
 
-  // 🔹 เช็คสถานะ PLC + Alarm (ใช้ API เดียว)
+  // ✅ check สถานะ PLC
   const checkStatus = async () => {
     try {
       const res = await fetch("/api/plc/status");
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
-      setPlcStatus(data.isRunning);
-      console.log("setAlarm", data);
-      setAlarm({ active: data.alarm, reason: data.reason });
-      setButtonsDisabled(false); // ปลดล็อกปุ่ม
+
+      // ถ้าค้าง → บังคับหยุด + clear alarm
+      if (plcStale) {
+        setPlcStatus(false);
+        setAlarm({ active: false, reason: "PLC stale → forced stop" });
+      } else {
+        setPlcStatus(data.isRunning);
+        setAlarm({ active: data.alarm, reason: data.reason });
+      }
+
+      setButtonsDisabled(false);
     } catch (err) {
       console.error("⚠️ Failed to fetch PLC status:", err);
-      // กันไม่ให้ค้าง
       setAlarm((prev) => ({
         ...prev,
-        error: true,
         reason: "DB temporarily unavailable",
       }));
     }
   };
 
+  // ✅ โหลด history + ดึงข้อมูลล่าสุด
   useEffect(() => {
     let isMounted = true;
     const intervalRef = { current: null as NodeJS.Timeout | null };
@@ -161,10 +171,14 @@ export default function PlcDashboard() {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/plc/latest");
-        if (!res.ok) return;
+        if (!res.ok) {
+          setPlcNoResponse(true);
+          return;
+        }
 
         const json = await res.json();
         const raw = new Date(json.timestamp);
+
         const newLog: LogType = {
           id: String(json.id),
           pressure: json.pressure,
@@ -174,27 +188,46 @@ export default function PlcDashboard() {
         };
 
         if (lastIdRef.current !== newLog.id) {
+          // ✅ มี log ใหม่
           lastIdRef.current = newLog.id;
-          if (isMounted) {
-            setLogs((prev) => [newLog, ...prev].slice(0, 50));
+          setLogs((prev) => [newLog, ...prev].slice(0, 50));
+
+          // clear flags
+          staleCountRef.current = 0;
+          setPlcStale(false);
+          setPlcNoResponse(false);
+        } else {
+          // ⚠️ log ซ้ำ
+          staleCountRef.current += 1;
+          console.log(
+            "⚠️ No new data:",
+            newLog.id,
+            "count:",
+            staleCountRef.current
+          );
+
+          if (staleCountRef.current >= 3) {
+            // 👉 ปรับเป็น 3 รอบติด (6 วิ)
+            sendCommand("RST");
+            setPlcStale(true);
+            setPlcStatus(false);
+            setAlarm({ active: false, reason: "PLC stale → forced stop" });
           }
         }
 
-        if (isMounted) {
-          setLastUpdate(
-            new Date().toLocaleTimeString("th-TH", { hour12: false })
-          );
-          await checkStatus();
-        }
+        setLastUpdate(
+          new Date().toLocaleTimeString("th-TH", { hour12: false })
+        );
+        await checkStatus();
       } catch (err) {
         console.error("PLC fetch error:", err);
+        setPlcNoResponse(true);
       }
     };
-
     // โหลด history ก่อน
     loadHistory().then(fetchData);
 
-    // ตั้ง interval แค่ครั้งเดียว
+    // ตั้ง interval
     const id = setInterval(fetchData, 2000);
     intervalRef.current = id;
 
@@ -204,10 +237,11 @@ export default function PlcDashboard() {
         clearInterval(intervalRef.current);
       }
     };
-  }, []);
+  }, [plcStale]);
 
   const latest = logs[0];
-  // Export logs to CSV
+
+  // ✅ Export CSV
   const exportToCSV = () => {
     if (typeof window === "undefined") return;
     if (!logs.length) return;
@@ -239,54 +273,63 @@ export default function PlcDashboard() {
     document.body.removeChild(link);
   };
 
-  // derive state
+  // ✅ derive system status
   let systemStatus: "running" | "stopped" | "idle";
-  if (alarm.active) {
-    systemStatus = "stopped"; // 🚨 ถ้ามี alarm = หยุด
+  if (plcNoResponse) {
+    systemStatus = "idle";
+  } else if (plcStale) {
+    systemStatus = "stopped"; // ❌ บังคับหยุดถ้าค้าง
+  } else if (alarm.active) {
+    systemStatus = "stopped";
   } else if (plcStatus === true) {
     systemStatus = "running";
   } else if (plcStatus === false) {
     systemStatus = "stopped";
   } else {
-    systemStatus = "idle"; // null (ยังไม่ได้ตรวจสอบ)
+    systemStatus = "idle";
   }
-
-  // const alarms = alarm?.active? alarm.reason.split(",").map((r) => r.trim()): [];
 
   return (
     <div className="p-6 space-y-6 bg-gray-100 min-h-screen">
-      {/* <AlarmBanner alarms={alarms} /> */}
+      {/* แจ้งเตือน error */}
+      {plcNoResponse && (
+        <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 flex items-center gap-2 shadow">
+          <AlertTriangle className="h-5 w-5 text-red-600" />
+          <span className="font-semibold">❌ ไม่สามารถเชื่อมต่อ PLC ได้</span>
+        </div>
+      )}
 
-      {/* โหลด + sync settings */}
+      {plcStale && !plcNoResponse && (
+        <div className="p-3 rounded-lg border border-orange-400 bg-orange-50 text-orange-700 flex items-center gap-2 shadow">
+          <AlertTriangle className="h-5 w-5 text-orange-600" />
+          <span className="font-semibold">
+            ⚠️ PLC ค้าง: ระบบถูกหยุดอัตโนมัติ
+          </span>
+        </div>
+      )}
+
+      {/* Status Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* System Status */}
         <div
-          className={`p-3 rounded-lg shadow border flex items-center gap-3 transition-all duration-500 hover:scale-[1.02] ${
+          className={`p-3 rounded-lg shadow border flex items-center gap-3 ${
             systemStatus === "running"
               ? "bg-green-50 border-green-400"
-              : systemStatus === "stopped"
-              ? "bg-red-50 border-red-400"
-              : "bg-yellow-50 border-yellow-400"
+              : "bg-red-50 border-red-400"
           }`}
         >
           <Activity
             className={`h-5 w-5 ${
               systemStatus === "running"
                 ? "text-green-600 animate-pulse-slow"
-                : systemStatus === "stopped"
-                ? "text-red-600 animate-pulse-slow"
-                : "text-yellow-600 animate-pulse-slow"
+                : "text-red-600 animate-pulse-slow"
             }`}
           />
-          <div className="leading-tight">
+          <div>
             <p className="text-xs text-gray-600">System</p>
             <p
               className={`font-bold text-sm ${
-                systemStatus === "running"
-                  ? "text-green-700"
-                  : systemStatus === "stopped"
-                  ? "text-red-700"
-                  : "text-yellow-700"
+                systemStatus === "running" ? "text-green-700" : "text-red-700"
               }`}
             >
               {systemStatus}
@@ -295,9 +338,9 @@ export default function PlcDashboard() {
         </div>
 
         {/* Last Update */}
-        <div className="p-3 rounded-lg shadow border bg-white flex items-center gap-3 transition-all duration-500 hover:scale-[1.02]">
+        <div className="p-3 rounded-lg shadow border bg-white flex items-center gap-3">
           <Wifi className="h-5 w-5 text-sky-500 animate-pulse-slow" />
-          <div className="leading-tight">
+          <div>
             <p className="text-xs text-gray-600">Last Update</p>
             <p className="font-bold text-sm text-gray-800">{lastUpdate}</p>
           </div>
@@ -309,7 +352,7 @@ export default function PlcDashboard() {
         />
 
         {/* Controls */}
-        <div className="p-3 rounded-lg shadow border bg-white flex flex-col gap-2 transition-all duration-500 hover:scale-[1.02]">
+        <div className="p-3 rounded-lg shadow border bg-white flex flex-col gap-2">
           <p className="text-xs text-gray-600 font-semibold">Controls</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <button
@@ -318,9 +361,10 @@ export default function PlcDashboard() {
                 buttonsDisabled ||
                 alarm?.active ||
                 plcStatus === true ||
-                loading !== null
+                loading !== null ||
+                plcStale // ❌ ถ้าค้างห้าม START
               }
-              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow flex items-center justify-center gap-2 transition bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300 disabled:text-gray-500"
+              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
             >
               {loading === "SET" ? (
                 <>
@@ -334,10 +378,8 @@ export default function PlcDashboard() {
 
             <button
               onClick={() => handleClick("RST")}
-              disabled={
-                buttonsDisabled || plcStatus === false || loading !== null
-              }
-              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow flex items-center justify-center gap-2 transition bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300 disabled:text-gray-500"
+              disabled={buttonsDisabled || loading !== null || plcStale}
+              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300"
             >
               {loading === "RST" ? (
                 <>
@@ -349,12 +391,8 @@ export default function PlcDashboard() {
               )}
             </button>
 
-            {/* Settings Button → ใช้ DialogTrigger */}
             <SettingsSync
-              onSettingsChange={(newSettings) => {
-                console.log("📡 Updated settings from modal:", newSettings);
-                setSettings(newSettings);
-              }}
+              onSettingsChange={(newSettings) => setSettings(newSettings)}
               buttonsDisabled={buttonsDisabled}
             />
           </div>
