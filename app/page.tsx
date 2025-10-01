@@ -1,103 +1,120 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+import { useSession } from "next-auth/react";
+import { ShieldCheck, User, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+export default function Dashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [countdown, setCountdown] = useState(5);
+
+  // ⏳ เริ่มนับถอยหลัง
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [status, session]);
+
+  // ✅ แยก useEffect คุม redirect ไม่ให้ชน render
+  useEffect(() => {
+    if (countdown === 0 && status === "authenticated" && session) {
+      router.push("/plc");
+    }
+  }, [countdown, status, session, router]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-700 font-medium">กำลังโหลด...</span>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="bg-white shadow-lg rounded-lg p-6 max-w-sm text-center">
+          <p className="text-gray-700 font-medium">❌ กรุณาเข้าสู่ระบบก่อน</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md text-center border border-gray-200">
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+          👋 ยินดีต้อนรับ
+        </h1>
+        <p className="text-gray-600 mb-6">
+          คุณคือ <span className="font-semibold">{session.user?.name}</span>
+        </p>
+
+        {session.user.role.toUpperCase() === "ADMIN" ? (
+          <div className="flex flex-col items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-xl shadow-inner">
+            <ShieldCheck className="w-10 h-10 text-green-600" />
+            <p className="font-semibold text-green-700">คุณคือ Admin</p>
+            <p className="text-sm text-green-600">
+              สามารถจัดการผู้ใช้งานและระบบได้ทั้งหมด
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-inner">
+            <User className="w-10 h-10 text-blue-600" />
+            <p className="font-semibold text-blue-700">คุณคือ User</p>
+            <p className="text-sm text-blue-600">
+              สามารถใช้งานระบบตามสิทธิ์ที่ได้รับ
+            </p>
+          </div>
+        )}
+
+        {/* Countdown + ปุ่มข้าม */}
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <div className="relative w-16 h-16">
+            <svg className="w-16 h-16 transform -rotate-90">
+              <circle
+                cx="32"
+                cy="32"
+                r="28"
+                stroke="#e5e7eb"
+                strokeWidth="6"
+                fill="transparent"
+              />
+              <circle
+                cx="32"
+                cy="32"
+                r="28"
+                stroke="#3b82f6"
+                strokeWidth="6"
+                fill="transparent"
+                strokeDasharray={2 * Math.PI * 28}
+                strokeDashoffset={(2 * Math.PI * 28 * (5 - countdown)) / 5}
+                className="transition-all duration-1000 ease-linear"
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center font-bold text-blue-600">
+              {countdown}
+            </span>
+          </div>
+
+          <p className="text-sm text-gray-500">
+            กำลังจะพาไปที่ <code>Dashboard</code>
+          </p>
+          <button
+            onClick={() => router.push("/plc")}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
+          >
+            ไปเลยตอนนี้ 🚀
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

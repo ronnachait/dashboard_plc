@@ -9,6 +9,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useSession } from "next-auth/react";
 
 type Setting = { sensor: string; maxValue: number };
 
@@ -23,7 +24,10 @@ export default function SettingsSync({
 }: SettingsSyncProps) {
   const [settings, setSettings] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false); // 👈 state คุม Dialog
+  const [open, setOpen] = useState(false);
+  const { data: session } = useSession();
+
+  const isAdmin = session?.user?.role?.toUpperCase() === "ADMIN";
 
   // ✅ โหลดค่าจาก DB
   const loadSettings = async () => {
@@ -35,19 +39,22 @@ export default function SettingsSync({
       data.settings.forEach((s: Setting) => {
         map[s.sensor] = s.maxValue;
       });
-
       setSettings(map);
       onSettingsChange?.(map);
-      setLoading(false);
     } catch (err) {
       console.error("❌ Load error:", err);
       toast.error("โหลด settings ไม่สำเร็จ");
+    } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Save (DB + Sync ไป Pi)
+  // ✅ Save (เฉพาะ Admin)
   const saveSettings = async () => {
+    if (!isAdmin) {
+      toast.error("⛔ คุณไม่มีสิทธิ์แก้ไขค่า");
+      return;
+    }
     try {
       setLoading(true);
       const payload: Setting[] = Object.entries(settings).map(
@@ -63,8 +70,6 @@ export default function SettingsSync({
       if (!res.ok) throw new Error("Save failed");
       toast.success("💾 Saved to DB");
       onSettingsChange?.(settings);
-
-      // ✅ ปิด Dialog หลัง save เสร็จ
       setOpen(false);
     } catch (err) {
       console.error("❌ Save error:", err);
@@ -74,13 +79,12 @@ export default function SettingsSync({
     }
   };
 
-  // ✅ auto load + sync ตอน mount
   useEffect(() => {
     loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateValue = (sensor: string, value: number) => {
+    if (!isAdmin) return; // ❌ User ห้ามแก้
     setSettings((prev) => ({ ...prev, [sensor]: value }));
   };
 
@@ -116,7 +120,8 @@ export default function SettingsSync({
                     type="number"
                     value={settings[s] ?? ""}
                     onChange={(e) => updateValue(s, Number(e.target.value))}
-                    className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800"
+                    disabled={!isAdmin}
+                    className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
                   />
                 </div>
               ))}
@@ -138,7 +143,8 @@ export default function SettingsSync({
                     type="number"
                     value={settings[s] ?? ""}
                     onChange={(e) => updateValue(s, Number(e.target.value))}
-                    className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800"
+                    disabled={!isAdmin}
+                    className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
                   />
                 </div>
               ))}
@@ -147,13 +153,19 @@ export default function SettingsSync({
 
           {/* BUTTONS */}
           <div className="flex justify-end gap-2">
-            <Button
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500"
-              disabled={loading}
-              onClick={saveSettings}
-            >
-              {loading ? "⏳ Saving..." : "💾 Save & Sync"}
-            </Button>
+            {isAdmin ? (
+              <Button
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500"
+                disabled={loading}
+                onClick={saveSettings}
+              >
+                {loading ? "⏳ Saving..." : "💾 Save & Sync"}
+              </Button>
+            ) : (
+              <p className="text-sm text-gray-500 italic">
+                🔒 เฉพาะ Admin เท่านั้นที่สามารถแก้ไขค่าได้
+              </p>
+            )}
           </div>
         </div>
       </DialogContent>

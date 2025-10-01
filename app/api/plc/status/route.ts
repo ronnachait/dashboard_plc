@@ -32,7 +32,7 @@ export async function GET() {
     if (!lastStatus) {
       return NextResponse.json({ error: "No status found" }, { status: 404 });
     }
-    console.log("lastStatus", lastStatus);
+
     return NextResponse.json(lastStatus);
   } catch (err: unknown) {
     if (err instanceof Error)

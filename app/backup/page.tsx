@@ -1,15 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 type PlcStats = {
   count: number;
-  size: number; // ✅ เปลี่ยนเป็น number
+  size: number;
 };
 
 function formatSize(size?: number | null): string {
-  if (!size) return "-"; // ถ้า undefined/null/0
+  if (!size) return "-";
   if (isNaN(size)) return "-";
-
   if (size >= 1024 ** 3) return (size / 1024 ** 3).toFixed(2) + " GB";
   if (size >= 1024 ** 2) return (size / 1024 ** 2).toFixed(2) + " MB";
   if (size >= 1024) return (size / 1024).toFixed(2) + " KB";
@@ -17,16 +19,21 @@ function formatSize(size?: number | null): string {
 }
 
 export default function BackupDeletePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [stats, setStats] = useState<PlcStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ✅ Helper: add log
   const addLog = (msg: string) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${msg}`, ...prev]);
   };
 
-  const fetchStats = async (isAuto = false) => {
+  // ✅ โหลด state จาก API
+  const fetchStats = useCallback(async (isAuto = false) => {
     try {
       if (!isAuto) setRefreshing(true);
       const res = await fetch("/api/plc/state");
@@ -34,28 +41,45 @@ export default function BackupDeletePage() {
       const data: PlcStats = await res.json();
       setStats(data);
 
-      if (isAuto) {
-        addLog(`🤖 Auto Refresh → Rows: ${data.count}, Size: ${data.size}`);
-      } else {
-        addLog(`🔄 Manual Refresh → Rows: ${data.count}, Size: ${data.size}`);
-      }
+      addLog(
+        `${isAuto ? "🤖 Auto Refresh" : "🔄 Manual Refresh"} → Rows: ${
+          data.count
+        }, Size: ${data.size}`
+      );
     } catch (err: unknown) {
       console.error(err);
       addLog(`❌ Refresh Stats ล้มเหลว`);
     } finally {
       if (!isAuto) setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    // โหลดครั้งแรก
-    fetchStats();
-    // Auto refresh ทุก 10 วินาที
-    const interval = setInterval(() => fetchStats(true), 10000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ ตรวจสอบสิทธิ์ Admin
+  useEffect(() => {
+    if (status === "loading") return;
+    if (!session) {
+      router.replace("/auth/login");
+    } else if (session.user.role.toUpperCase() !== "ADMIN") {
+      toast.error("🚫 คุณไม่มีสิทธิ์เข้าใช้งานหน้านี้");
+      router.replace("/plc");
+    }
+  }, [session, status, router]);
+
+  // ✅ Auto refresh ทุก 10 วิ
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(() => fetchStats(true), 10000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
+
+  // 🚧 ถ้ายังไม่ได้ login หรือไม่ใช่ admin → แสดงข้อความ
+  if (!session || session.user.role.toUpperCase() !== "ADMIN") {
+    return (
+      <p className="text-center text-red-600 mt-10">⏳ Checking access...</p>
+    );
+  }
+
+  // ✅ ฟังก์ชัน Backup
   const handleBackup = async () => {
     try {
       setLoading(true);
@@ -87,6 +111,7 @@ export default function BackupDeletePage() {
     }
   };
 
+  // ✅ ฟังก์ชัน Delete
   const handleDelete = async () => {
     if (!confirm("⚠️ ต้องการลบข้อมูล PlcLog ทั้งหมดจริงหรือไม่?")) return;
     try {
@@ -112,9 +137,7 @@ export default function BackupDeletePage() {
         <h1 className="text-3xl font-extrabold text-sky-700">
           PlcLog Backup & Delete
         </h1>
-        <p className="text-gray-600">
-          จัดการข้อมูล PlcLog: Backup เก็บไว้ หรือ ลบออกทั้งหมด
-        </p>
+        <p className="text-gray-600">สำหรับ Admin เท่านั้น</p>
       </div>
 
       {/* Stats + Refresh */}

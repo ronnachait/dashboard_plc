@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "public"."User" ALTER COLUMN "name" DROP NOT NULL,
+ALTER COLUMN "role" DROP DEFAULT;

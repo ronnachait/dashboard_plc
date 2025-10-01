@@ -90,18 +90,10 @@ export default function PlcDashboard() {
 
   const sendCommand = async (command: "SET" | "RST" | "RESET") => {
     try {
-      let url = "/api/plc/command"; // default = Azure
-      if (command === "RESET") {
-        url = "/api/plc/reset"; // ✅ proxy ผ่าน Next.js server
-      }
-
-      const res = await fetch(url, {
+      const res = await fetch("/api/plc/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:
-          command !== "RESET"
-            ? JSON.stringify({ command, source: "WEB" })
-            : undefined,
+        body: JSON.stringify({ command, source: "WEB" }),
       });
 
       if (!res.ok) {
@@ -111,7 +103,7 @@ export default function PlcDashboard() {
       }
 
       const result = await res.json();
-      console.log("✅ Command created:", result);
+      console.log("✅ Command result:", result);
 
       await checkStatus();
       setLoading(null);
@@ -145,7 +137,6 @@ export default function PlcDashboard() {
     if (alarm.active) {
       toast.warning(`🚨 Alarm Active: ${alarm.reason}`);
     }
-    console.log(alarm);
   }, [alarm]);
 
   // ✅ โหลด history + ดึงข้อมูลล่าสุด

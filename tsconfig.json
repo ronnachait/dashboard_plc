@@ -16,7 +16,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "types": ["chart.js", "node"],
+    "types": ["chart.js", "node", "next-auth"],
     "plugins": [
       {
         "name": "next"

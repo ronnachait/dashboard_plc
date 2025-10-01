@@ -20,6 +20,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "bcryptjs": "^3.0.2",
     "body-parser": "^1.20.3",
     "chartjs-plugin-annotation": "^3.1.0",
     "chartjs-plugin-zoom": "^2.2.0",
@@ -33,6 +34,7 @@
     "lucide-react": "^0.544.0",
     "modbus-serial": "^8.0.21-no-serial-port",
     "next": "15.5.3",
+    "next-auth": "^4.24.11",
     "pg": "^8.16.3",
     "react": "19.1.0",
     "react-chartjs-2": "^5.3.0",
@@ -44,6 +46,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.17",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",

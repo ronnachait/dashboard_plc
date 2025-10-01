@@ -2,53 +2,50 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { command } = await req.json();
+    const SECRET_KEY = process.env.PLC_SECRET_KEY!;
 
+    // ✅ รับ command
+    const { command } = await req.json();
     if (!["SET", "RST", "RESET"].includes(command)) {
       return Response.json({ error: "Invalid command" }, { status: 400 });
     }
 
-    // ดึงสถานะปัจจุบัน
-    const current = await prisma.plcStatus.findFirst();
-    const id = current?.id ?? "plc-status-01";
+    // ✅ หา ngrok URL ล่าสุด
+    const record = await prisma.ngrokTunnel.findUnique({
+      where: { id: "ngrok-url" },
+    });
+    if (!record?.url) {
+      return Response.json({ error: "No Pi server URL set" }, { status: 500 });
+    }
+    const PI_SERVER = record.url;
 
-    if (command === "SET") {
-      // ❌ ห้าม start ถ้ามี alarm
-      if (current?.alarm) {
-        return Response.json(
-          { error: "Alarm active, cannot start" },
-          { status: 403 }
-        );
-      }
+    // ✅ Map endpoint
+    let endpoint = "/plc/start";
+    if (command === "RST") endpoint = "/plc/stop";
+    if (command === "RESET") endpoint = "/plc/reset";
+    console.log("Run Command", `${PI_SERVER}${endpoint}`);
+    // ✅ ยิงไปที่ Pi
+    const res = await fetch(`${PI_SERVER}${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": SECRET_KEY,
+      },
+      body:
+        command !== "RESET"
+          ? JSON.stringify({ command, source: "WEB" })
+          : undefined,
+    });
 
-      const status = await prisma.plcStatus.upsert({
-        where: { id },
-        update: { isRunning: true },
-        create: { id, isRunning: true },
-      });
-      return Response.json({ success: true, status });
+    if (!res.ok) {
+      const text = await res.text();
+      return Response.json({ error: text }, { status: res.status });
     }
 
-    if (command === "RST") {
-      const status = await prisma.plcStatus.upsert({
-        where: { id },
-        update: { isRunning: false },
-        create: { id, isRunning: false },
-      });
-      return Response.json({ success: true, status });
-    }
-
-    if (command === "RESET") {
-      // ✅ reset alarm เท่านั้น ไม่ยุ่งกับการ run/stop
-      const status = await prisma.plcStatus.upsert({
-        where: { id },
-        update: { alarm: false, reason: null },
-        create: { id, isRunning: false, alarm: false },
-      });
-      return Response.json({ success: true, status });
-    }
+    const data = await res.json();
+    return Response.json({ success: true, data });
   } catch (err) {
-    console.error("❌ POST error:", err);
-    return Response.json({ error: "Server error" }, { status: 500 });
+    console.error("❌ Command proxy error:", err);
+    return Response.json({ error: "Proxy command failed" }, { status: 500 });
   }
 }
