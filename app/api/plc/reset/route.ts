@@ -2,9 +2,8 @@
 export async function POST() {
   try {
     const SECRET_KEY = process.env.PLC_SECRET_KEY!;
-    const URL = process.env.DASHBOARD_URL!;
     // 🌍 ดึง ngrok URL ล่าสุดจาก API ในโปรเจกต์เดียวกัน
-    const urlRes = await fetch(`${URL}/api/ngrok-url`);
+    const urlRes = await fetch(`/api/ngrok-url`);
     const { url: PI_SERVER } = await urlRes.json();
 
     if (!PI_SERVER) {
