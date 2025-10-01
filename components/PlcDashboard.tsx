@@ -85,23 +85,30 @@ export default function PlcDashboard() {
     return () => evtSource.close();
   }, []);
 
-  // ✅ ส่งคำสั่ง
-  const handleClick = async (cmd: "SET" | "RST") => {
-    setLoading(cmd);
+  const handleClick = async (cmd: "SET" | "RST" | "RESET") => {
+    setLoading(cmd === "RESET" ? null : cmd); // RESET ไม่ต้องโชว์ loader
     await sendCommand(cmd);
   };
 
-  const sendCommand = async (command: "SET" | "RST") => {
+  const sendCommand = async (command: "SET" | "RST" | "RESET") => {
     try {
-      const res = await fetch("/api/plc/command", {
+      let url = "/api/plc/command"; // default = Azure
+      if (command === "RESET") {
+        url = "/api/plc/reset"; // ✅ proxy ผ่าน Next.js server
+      }
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, source: "WEB" }),
+        body:
+          command !== "RESET"
+            ? JSON.stringify({ command, source: "WEB" })
+            : undefined,
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        alert(`❌ Command failed: ${data.error || "Unknown"}`);
+        const data = await res.json().catch(() => ({}));
+        toast.error(`❌ Command failed: ${data.error || "Unknown"}`);
         return;
       }
 
@@ -112,6 +119,7 @@ export default function PlcDashboard() {
       setLoading(null);
     } catch (err) {
       console.error("❌ Error:", err);
+      toast.error("Request failed");
     }
   };
 
@@ -140,6 +148,13 @@ export default function PlcDashboard() {
       }));
     }
   };
+
+  useEffect(() => {
+    if (alarm.active) {
+      toast.warning(`🚨 Alarm Active: ${alarm.reason}`);
+    }
+    console.log(alarm);
+  }, [alarm]);
 
   // ✅ โหลด history + ดึงข้อมูลล่าสุด
   useEffect(() => {
@@ -299,6 +314,12 @@ export default function PlcDashboard() {
         </div>
       )}
 
+      {alarm.active && (
+        <div className="p-3 rounded-lg border border-yellow-500 bg-yellow-50 text-yellow-800 shadow">
+          ⚠️ Alarm ยังไม่ถูก Reset → {alarm.reason}
+        </div>
+      )}
+
       {plcStale && !plcNoResponse && (
         <div className="p-3 rounded-lg border border-orange-400 bg-orange-50 text-orange-700 flex items-center gap-2 shadow">
           <AlertTriangle className="h-5 w-5 text-orange-600" />
@@ -389,6 +410,15 @@ export default function PlcDashboard() {
               ) : (
                 "■ STOP"
               )}
+            </button>
+            <button
+              onClick={() => handleClick("RESET")}
+              disabled={!alarm?.active || buttonsDisabled || plcStale}
+              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow 
+             bg-yellow-500 hover:bg-yellow-600 text-white 
+             disabled:bg-gray-300"
+            >
+              🔄 RESET
             </button>
 
             <SettingsSync
