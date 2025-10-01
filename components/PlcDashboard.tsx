@@ -57,9 +57,7 @@ export default function PlcDashboard() {
   const [plcStatus, setPlcStatus] = useState<boolean | null>(null);
   const [buttonsDisabled, setButtonsDisabled] = useState(true);
   const [loading, setLoading] = useState<"SET" | "RST" | null>(null);
-  const staleCountRef = useRef(0);
   const [plcNoResponse, setPlcNoResponse] = useState(false); // API ไม่ตอบ
-  const [plcStale, setPlcStale] = useState(false); // มีข้อมูลแต่ไม่เปลี่ยน
 
   const [alarm, setAlarm] = useState<{ active: boolean; reason: string }>({
     active: false,
@@ -130,14 +128,8 @@ export default function PlcDashboard() {
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
 
-      // ถ้าค้าง → บังคับหยุด + clear alarm
-      if (plcStale) {
-        setPlcStatus(false);
-        setAlarm({ active: false, reason: "PLC stale → forced stop" });
-      } else {
-        setPlcStatus(data.isRunning);
-        setAlarm({ active: data.alarm, reason: data.reason });
-      }
+      setPlcStatus(data.isRunning);
+      setAlarm({ active: data.alarm, reason: data.reason });
 
       setButtonsDisabled(false);
     } catch (err) {
@@ -203,31 +195,8 @@ export default function PlcDashboard() {
         };
 
         if (lastIdRef.current !== newLog.id) {
-          // ✅ มี log ใหม่
           lastIdRef.current = newLog.id;
           setLogs((prev) => [newLog, ...prev].slice(0, 50));
-
-          // clear flags
-          staleCountRef.current = 0;
-          setPlcStale(false);
-          setPlcNoResponse(false);
-        } else {
-          // ⚠️ log ซ้ำ
-          staleCountRef.current += 1;
-          console.log(
-            "⚠️ No new data:",
-            newLog.id,
-            "count:",
-            staleCountRef.current
-          );
-
-          if (staleCountRef.current >= 3) {
-            // 👉 ปรับเป็น 3 รอบติด (6 วิ)
-            sendCommand("RST");
-            setPlcStale(true);
-            setPlcStatus(false);
-            setAlarm({ active: false, reason: "PLC stale → forced stop" });
-          }
         }
 
         setLastUpdate(
@@ -252,7 +221,7 @@ export default function PlcDashboard() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [plcStale]);
+  }, []);
 
   const latest = logs[0];
 
@@ -288,12 +257,9 @@ export default function PlcDashboard() {
     document.body.removeChild(link);
   };
 
-  // ✅ derive system status
   let systemStatus: "running" | "stopped" | "idle";
   if (plcNoResponse) {
     systemStatus = "idle";
-  } else if (plcStale) {
-    systemStatus = "stopped"; // ❌ บังคับหยุดถ้าค้าง
   } else if (alarm.active) {
     systemStatus = "stopped";
   } else if (plcStatus === true) {
@@ -317,15 +283,6 @@ export default function PlcDashboard() {
       {alarm.active && (
         <div className="p-3 rounded-lg border border-yellow-500 bg-yellow-50 text-yellow-800 shadow">
           ⚠️ Alarm ยังไม่ถูก Reset → {alarm.reason}
-        </div>
-      )}
-
-      {plcStale && !plcNoResponse && (
-        <div className="p-3 rounded-lg border border-orange-400 bg-orange-50 text-orange-700 flex items-center gap-2 shadow">
-          <AlertTriangle className="h-5 w-5 text-orange-600" />
-          <span className="font-semibold">
-            ⚠️ PLC ค้าง: ระบบถูกหยุดอัตโนมัติ
-          </span>
         </div>
       )}
 
@@ -382,8 +339,7 @@ export default function PlcDashboard() {
                 buttonsDisabled ||
                 alarm?.active ||
                 plcStatus === true ||
-                loading !== null ||
-                plcStale // ❌ ถ้าค้างห้าม START
+                loading !== null
               }
               className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
             >
@@ -399,7 +355,7 @@ export default function PlcDashboard() {
 
             <button
               onClick={() => handleClick("RST")}
-              disabled={buttonsDisabled || loading !== null || plcStale}
+              disabled={buttonsDisabled || loading !== null}
               className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300"
             >
               {loading === "RST" ? (
@@ -413,7 +369,7 @@ export default function PlcDashboard() {
             </button>
             <button
               onClick={() => handleClick("RESET")}
-              disabled={!alarm?.active || buttonsDisabled || plcStale}
+              disabled={!alarm?.active || buttonsDisabled}
               className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow 
              bg-yellow-500 hover:bg-yellow-600 text-white 
              disabled:bg-gray-300"

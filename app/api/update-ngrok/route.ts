@@ -1,17 +1,27 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method === "POST") {
-    const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ ok: false, error: "Missing url" });
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { url } = body;
+    const secret = req.headers.get("x-api-key");
+
+    if (secret !== process.env.PLC_SECRET_KEY) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
-    // อัปเดตหรือสร้างใหม่
+    if (!url) {
+      return NextResponse.json(
+        { ok: false, error: "Missing url" },
+        { status: 400 }
+      );
+    }
+
+    // 👉 update ถ้ามี, create ถ้าไม่มี
     const record = await prisma.ngrokTunnel.upsert({
       where: { id: "ngrok-url" },
       update: { url },
@@ -19,8 +29,17 @@ export default async function handler(
     });
 
     console.log("🌍 Ngrok URL updated:", record.url);
-    return res.json({ ok: true, url: record.url });
-  }
 
-  return res.status(405).json({ ok: false, error: "Method not allowed" });
+    return NextResponse.json({
+      ok: true,
+      url: record.url,
+      updatedAt: record.updatedAt,
+    });
+  } catch (error) {
+    console.error("❌ Update ngrok error:", error);
+    return NextResponse.json(
+      { ok: false, error: "Server error" },
+      { status: 500 }
+    );
+  }
 }
