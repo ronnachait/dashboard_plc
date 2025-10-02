@@ -24,7 +24,6 @@ const authOptions: NextAuthOptions = {
         const isValid = await compare(credentials.password, user.password);
         if (!isValid) return null;
 
-        // ✅ Cast เป็น User ของ Prisma
         return user as User;
       },
     }),
@@ -57,6 +56,9 @@ const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
       }
       return session;
+    },
+    async redirect() {
+      return process.env.NEXTAUTH_URL || "/";
     },
   },
 };
