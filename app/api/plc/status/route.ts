@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
 export async function POST(req: Request) {
-  const { alarm, reason } = await req.json();
+  const { isRunning, alarm, reason } = await req.json();
 
   // ดึง status ปัจจุบัน
   const current = await prisma.plcStatus.findFirst();
 
-  let isRunning = current?.isRunning ?? false;
+  let runningState = isRunning ?? current?.isRunning ?? false;
 
+  // 🚨 ถ้ามี alarm → บังคับ stop
   if (alarm) {
-    // 🚨 ถ้ามี alarm → บังคับ stop
-    isRunning = false;
+    runningState = false;
   }
 
   const status = await prisma.plcStatus.upsert({
     where: { id: current?.id ?? "plc-status-01" },
-    update: { isRunning, alarm, reason },
-    create: { id: "plc-status-01", isRunning, alarm, reason },
+    update: { isRunning: runningState, alarm, reason },
+    create: { id: "plc-status-01", isRunning: runningState, alarm, reason },
   });
 
   return Response.json({ success: true, status });
