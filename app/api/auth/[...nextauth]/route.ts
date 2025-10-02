@@ -57,8 +57,26 @@ const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async redirect() {
-      return process.env.NEXTAUTH_URL || "/";
+    async redirect({ url, baseUrl }) {
+      const appUrl = process.env.NEXTAUTH_URL || baseUrl;
+
+      try {
+        const target = new URL(url, appUrl); // ใช้ appUrl เป็น base เผื่อ url เป็นแค่ path
+
+        // ใช้ host/domain จาก NEXTAUTH_URL เสมอ
+        const safeBase = new URL(appUrl);
+
+        // replace host + protocol ให้ตรงกับ NEXTAUTH_URL
+        target.protocol = safeBase.protocol;
+        target.host = safeBase.host;
+
+        return target.toString();
+      } catch (e) {
+        // fallback: กลับไป root
+        console.error("Redirect error:", e);
+
+        return appUrl;
+      }
     },
   },
 };
