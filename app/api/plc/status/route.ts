@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const current = await prisma.plcStatus.findFirst();
 
   let runningState = isRunning ?? current?.isRunning ?? false;
-
+  console.log("runningState", runningState);
   // 🚨 ถ้ามี alarm → บังคับ stop
   if (alarm) {
     runningState = false;

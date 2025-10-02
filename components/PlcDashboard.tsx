@@ -1,4 +1,3 @@
-// PlcDashboard.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -57,55 +56,27 @@ export default function PlcDashboard() {
   const [plcStatus, setPlcStatus] = useState<boolean | null>(null);
   const [buttonsDisabled, setButtonsDisabled] = useState(true);
   const [loading, setLoading] = useState<"SET" | "RST" | null>(null);
-  const [plcNoResponse, setPlcNoResponse] = useState(false); // API ไม่ตอบ
+  const [plcNoResponse, setPlcNoResponse] = useState(false);
 
   const [alarm, setAlarm] = useState<{ active: boolean; reason: string }>({
     active: false,
     reason: "",
   });
 
-  // ✅ listen event จาก server
-  useEffect(() => {
-    const evtSource = new EventSource("/api/plc/events");
-
-    evtSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.type === "PLC_STATUS") {
-        setPlcStatus(data.payload.isRunning);
-        setLoading(null);
-        toast.success(
-          data.payload.isRunning ? "✅ PLC Started" : "🛑 PLC Stopped"
-        );
-      }
-    };
-
-    return () => evtSource.close();
-  }, []);
-
+  // ✅ handle click
   const handleClick = async (cmd: "SET" | "RST" | "RESET") => {
-    setLoading(cmd === "RESET" ? null : cmd); // RESET ไม่ต้องโชว์ loader
-    await sendCommand(cmd);
-  };
-
-  const sendCommand = async (command: "SET" | "RST" | "RESET") => {
+    setLoading(cmd === "RESET" ? null : cmd);
     try {
       const res = await fetch("/api/plc/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, source: "WEB" }),
+        body: JSON.stringify({ command: cmd, source: "WEB" }),
       });
-
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(`❌ Command failed: ${data.error || "Unknown"}`);
         return;
       }
-
-      const result = await res.json();
-      console.log("✅ Command result:", result);
-
-      await checkStatus();
       setLoading(null);
     } catch (err) {
       console.error("❌ Error:", err);
@@ -113,114 +84,110 @@ export default function PlcDashboard() {
     }
   };
 
-  // ✅ check สถานะ PLC
-  const checkStatus = async () => {
-    try {
-      const res = await fetch("/api/plc/status");
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
-      console.log("PLC Status : ", data.isRunning);
-      setPlcStatus(data.isRunning);
-      setAlarm({ active: data.alarm, reason: data.reason });
-
-      setButtonsDisabled(false);
-    } catch (err) {
-      console.error("⚠️ Failed to fetch PLC status:", err);
-      setAlarm((prev) => ({
-        ...prev,
-        reason: "DB temporarily unavailable",
-      }));
-    }
-  };
-
+  // ✅ โหลด history ครั้งแรก
   useEffect(() => {
-    if (alarm.active) {
-      toast.warning(`🚨 Alarm Active: ${alarm.reason}`);
-    }
-  }, [alarm]);
-
-  // ✅ โหลด history + ดึงข้อมูลล่าสุด
-  useEffect(() => {
-    let isMounted = true;
-    const intervalRef = { current: null as NodeJS.Timeout | null };
-
     const loadHistory = async () => {
-      const res = await fetch("/api/plc/history?limit=50");
-      const json = await res.json();
-      const mapped: LogType[] = json.map((item: ApiLog) => {
-        const raw = new Date(item.createdAt);
-        return {
-          id: String(item.id),
-          pressure: item.pressure,
-          temperature: item.temperature,
-          createdAtRaw: raw,
-          createdAt: raw.toLocaleTimeString("th-TH", { hour12: false }),
-        };
-      });
-      const ordered = mapped.sort(
-        (a, b) => b.createdAtRaw.getTime() - a.createdAtRaw.getTime()
-      );
-      if (isMounted) {
-        setLogs(ordered);
-        lastIdRef.current = ordered.length > 0 ? ordered[0].id : null;
-      }
-    };
-
-    const fetchData = async () => {
       try {
-        const res = await fetch("/api/plc/latest");
-        if (!res.ok) {
-          setPlcNoResponse(true);
-          return;
-        }
-
+        const res = await fetch("/api/plc/history?limit=50");
         const json = await res.json();
-        const raw = new Date(json.timestamp);
-
-        const newLog: LogType = {
-          id: String(json.id),
-          pressure: json.pressure,
-          temperature: json.temperature,
-          createdAtRaw: raw,
-          createdAt: raw.toLocaleTimeString("th-TH", { hour12: false }),
-        };
-
-        if (lastIdRef.current !== newLog.id) {
-          lastIdRef.current = newLog.id;
-          setLogs((prev) => [newLog, ...prev].slice(0, 50));
-        }
-
-        setLastUpdate(
-          new Date().toLocaleTimeString("th-TH", { hour12: false })
+        const mapped: LogType[] = json.map((item: ApiLog) => {
+          const raw = new Date(item.createdAt);
+          return {
+            id: String(item.id),
+            pressure: item.pressure,
+            temperature: item.temperature,
+            createdAtRaw: raw,
+            createdAt: raw.toLocaleTimeString("th-TH", { hour12: false }),
+          };
+        });
+        setLogs(
+          mapped.sort(
+            (a, b) => b.createdAtRaw.getTime() - a.createdAtRaw.getTime()
+          )
         );
-        await checkStatus();
+        if (mapped.length > 0) {
+          lastIdRef.current = mapped[0].id;
+        }
       } catch (err) {
-        console.error("PLC fetch error:", err);
-        setPlcNoResponse(true);
+        console.error("⚠️ Load history failed:", err);
       }
     };
-    // โหลด history ก่อน
-    loadHistory().then(fetchData);
+    loadHistory();
+  }, []);
+  // ✅ subscribe SSE (with auto-retry)
+  useEffect(() => {
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let es: EventSource | null = null;
 
-    // ตั้ง interval
-    const id = setInterval(fetchData, 2000);
-    intervalRef.current = id;
+    const connectSSE = () => {
+      console.log("🔌 Connecting SSE...");
+      es = new EventSource("/api/plc/events");
+
+      es.onopen = () => {
+        console.log("✅ SSE connected");
+        setPlcNoResponse(false); // ต่อสำเร็จ → clear error
+      };
+
+      es.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case "PLC_SENSOR": {
+            const raw = new Date(data.payload.ts);
+            const newLog: LogType = {
+              id: raw.getTime().toString(),
+              pressure: data.payload.pressure,
+              temperature: data.payload.temperature,
+              createdAtRaw: raw,
+              createdAt: raw.toLocaleTimeString("th-TH", { hour12: false }),
+            };
+            if (lastIdRef.current !== newLog.id) {
+              lastIdRef.current = newLog.id;
+              setLogs((prev) => [newLog, ...prev].slice(0, 50));
+            }
+            setLastUpdate(
+              new Date().toLocaleTimeString("th-TH", { hour12: false })
+            );
+            break;
+          }
+
+          case "PLC_STATUS": {
+            setPlcStatus(data.payload.isRunning);
+            setAlarm(data.payload.alarm);
+            setButtonsDisabled(false);
+            break;
+          }
+
+          default:
+            console.log("ℹ️ Unknown event:", data);
+        }
+      };
+
+      es.onerror = (err) => {
+        console.error("⚠️ SSE disconnected:", err);
+        setPlcNoResponse(true); // แสดงว่า offline
+        es?.close();
+
+        // ลองใหม่หลัง 5 วิ
+        if (retryTimeout) clearTimeout(retryTimeout);
+        retryTimeout = setTimeout(connectSSE, 5000);
+      };
+    };
+
+    connectSSE();
 
     return () => {
-      isMounted = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      console.log("🧹 Cleaning up SSE...");
+      es?.close();
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, []);
 
   const latest = logs[0];
 
-  // ✅ Export CSV
+  // ✅ CSV Export
   const exportToCSV = () => {
-    if (typeof window === "undefined") return;
     if (!logs.length) return;
-
     const header = [
       "Time",
       "P1",
@@ -237,7 +204,6 @@ export default function PlcDashboard() {
       [l.createdAt, ...l.pressure, ...l.temperature].join(",")
     );
     const csvContent = [header.join(","), ...rows].join("\n");
-
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -248,17 +214,18 @@ export default function PlcDashboard() {
     document.body.removeChild(link);
   };
 
-  let systemStatus: "running" | "stopped" | "idle";
+  let systemStatus: "running" | "stopped" | "idle" | "offline";
+
   if (plcNoResponse) {
-    systemStatus = "idle";
+    systemStatus = "offline"; // ❌ connection lost
   } else if (alarm.active) {
-    systemStatus = "stopped";
+    systemStatus = "stopped"; // 🚨 alarm stop
   } else if (plcStatus === true) {
     systemStatus = "running";
   } else if (plcStatus === false) {
     systemStatus = "stopped";
   } else {
-    systemStatus = "idle";
+    systemStatus = "idle"; // ไม่มีข้อมูล ยังไม่เริ่ม
   }
 
   return (
@@ -277,32 +244,30 @@ export default function PlcDashboard() {
         </div>
       )}
 
-      {/* Status Cards */}
+      {/* Status + Controls */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* System Status */}
         <div
           className={`p-3 rounded-lg shadow border flex items-center gap-3 ${
             systemStatus === "running"
               ? "bg-green-50 border-green-400"
+              : systemStatus === "offline"
+              ? "bg-gray-200 border-gray-400"
               : "bg-red-50 border-red-400"
           }`}
         >
           <Activity
             className={`h-5 w-5 ${
               systemStatus === "running"
-                ? "text-green-600 animate-pulse-slow"
-                : "text-red-600 animate-pulse-slow"
-            }`}
+                ? "text-green-600"
+                : systemStatus === "offline"
+                ? "text-gray-500"
+                : "text-red-600"
+            } animate-pulse-slow`}
           />
           <div>
             <p className="text-xs text-gray-600">System</p>
-            <p
-              className={`font-bold text-sm ${
-                systemStatus === "running" ? "text-green-700" : "text-red-700"
-              }`}
-            >
-              {systemStatus}
-            </p>
+            <p className="font-bold text-sm">{systemStatus}</p>
           </div>
         </div>
 
@@ -315,6 +280,7 @@ export default function PlcDashboard() {
           </div>
         </div>
 
+        {/* Alarm Card */}
         <AlarmCard
           active={alarm.active}
           reasons={alarm.reason ? alarm.reason.split(", ") : []}
@@ -322,23 +288,25 @@ export default function PlcDashboard() {
 
         {/* Controls */}
         <div className="p-3 rounded-lg shadow border bg-white flex flex-col gap-2">
-          <p className="text-xs text-gray-600 font-semibold">Controls</p>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Controls
+          </h3>
+
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => handleClick("SET")}
               disabled={
                 buttonsDisabled ||
-                alarm?.active ||
+                alarm.active ||
                 plcStatus === true ||
                 loading !== null
               }
-              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
+              className="px-2 py-2 rounded-md text-xs font-bold 
+                 bg-green-600 hover:bg-green-700 text-white 
+                 shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
               {loading === "SET" ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4" />
-                  กำลังเริ่ม...
-                </>
+                <Loader2 className="animate-spin h-3 w-3 mx-auto" />
               ) : (
                 "▶ START"
               )}
@@ -347,37 +315,38 @@ export default function PlcDashboard() {
             <button
               onClick={() => handleClick("RST")}
               disabled={buttonsDisabled || loading !== null}
-              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300"
+              className="px-2 py-2 rounded-md text-xs font-bold 
+                 bg-red-600 hover:bg-red-700 text-white 
+                 shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
               {loading === "RST" ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4" />
-                  กำลังหยุด...
-                </>
+                <Loader2 className="animate-spin h-3 w-3 mx-auto" />
               ) : (
                 "■ STOP"
               )}
             </button>
+
             <button
               onClick={() => handleClick("RESET")}
-              disabled={!alarm?.active || buttonsDisabled}
-              className="flex-1 px-3 py-2 rounded-md text-sm font-bold shadow 
-             bg-yellow-500 hover:bg-yellow-600 text-white 
-             disabled:bg-gray-300"
+              disabled={!alarm.active || buttonsDisabled}
+              className="px-2 py-2 rounded-md text-xs font-bold 
+                 bg-yellow-500 hover:bg-yellow-600 text-white 
+                 shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
               🔄 RESET
             </button>
-
-            <SettingsSync
-              onSettingsChange={(newSettings) => setSettings(newSettings)}
-              buttonsDisabled={buttonsDisabled}
-            />
           </div>
+
+          <SettingsSync
+            onSettingsChange={(newSettings) => setSettings(newSettings)}
+            buttonsDisabled={buttonsDisabled}
+          />
         </div>
       </div>
-      {/* Two Column Layout */}
+
+      {/* Sensor Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Pressure */}
+        {/* Pressure */}
         <div className="space-y-2">
           <SensorChart
             title="Pressure Sensors / ความดัน"
@@ -400,32 +369,23 @@ export default function PlcDashboard() {
               },
             ]}
             maxY={12}
-            threshold={{
-              value: 6,
-              color: "red",
-              label: "Max Pressure 6 bar",
-            }}
+            threshold={{ value: 6, color: "red", label: "Max Pressure 6 bar" }}
           />
-
           <div className="grid grid-cols-3 gap-2">
             {latest &&
-              latest.pressure.map((p, i) => {
-                const sensor = `P${i + 1}`;
-                const maxValue = settings[sensor] ?? 12;
-                return (
-                  <SensorGauge
-                    key={sensor}
-                    label={sensor}
-                    value={p}
-                    unit="bar"
-                    maxValue={maxValue}
-                  />
-                );
-              })}
+              latest.pressure.map((p, i) => (
+                <SensorGauge
+                  key={`P${i + 1}`}
+                  label={`P${i + 1}`}
+                  value={p}
+                  unit="bar"
+                  maxValue={settings[`P${i + 1}`] ?? 12}
+                />
+              ))}
           </div>
         </div>
 
-        {/* Right: Temperature */}
+        {/* Temperature */}
         <div className="space-y-2">
           <SensorChart
             title="Temperature Sensors / อุณหภูมิ"
@@ -465,28 +425,22 @@ export default function PlcDashboard() {
             maxY={120}
             threshold={{ value: 80, color: "orange", label: "Max Temp 80°C" }}
           />
-
           <div className="grid grid-cols-3 gap-2">
             {latest &&
-              latest.temperature.map((t, i) => {
-                const sensor = `T${i + 1}`;
-                const maxTemp = settings[sensor] ?? 80;
-                return (
-                  <SensorGauge
-                    key={sensor}
-                    label={sensor}
-                    value={t}
-                    unit="°C"
-                    maxValue={maxTemp}
-                  />
-                );
-              })}
+              latest.temperature.map((t, i) => (
+                <SensorGauge
+                  key={`T${i + 1}`}
+                  label={`T${i + 1}`}
+                  value={t}
+                  unit="°C"
+                  maxValue={settings[`T${i + 1}`] ?? 80}
+                />
+              ))}
           </div>
         </div>
       </div>
 
       {/* Log Table */}
-
       <div className="p-4 rounded-lg border bg-white shadow">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-gray-700 text-sm">
@@ -507,7 +461,6 @@ export default function PlcDashboard() {
             </button>
           </div>
         </div>
-
         <div className="max-h-80 overflow-y-auto rounded border">
           <table className="text-xs w-full border-collapse">
             <thead className="sticky top-0 bg-sky-600 text-white text-[13px] shadow z-0">
@@ -537,41 +490,33 @@ export default function PlcDashboard() {
                     <td className="px-3 py-2 font-mono text-gray-700">
                       {l.createdAt}
                     </td>
-
-                    {/* Pressure */}
                     {l.pressure.map((p, j) => {
-                      const sensor = `P${j + 1}`;
-                      const limit = settings[sensor] ?? 6; // ถ้าไม่มีค่าใช้ 6 เป็น default
-                      const isHigh = p > limit;
-
+                      const limit = settings[`P${j + 1}`] ?? 6;
                       return (
                         <td
                           key={j}
                           className={`px-3 py-2 text-center font-medium ${
-                            isHigh ? "bg-red-50 text-red-600" : "text-gray-800"
+                            p > limit
+                              ? "bg-red-50 text-red-600"
+                              : "text-gray-800"
                           }`}
                         >
-                          {isHigh ? `🚨 ${p}` : p}
+                          {p > limit ? `🚨 ${p}` : p}
                         </td>
                       );
                     })}
-
-                    {/* Temperature */}
                     {l.temperature.map((t, j) => {
-                      const sensor = `T${j + 1}`;
-                      const limit = settings[sensor] ?? 80;
-                      const isHot = t > limit;
-
+                      const limit = settings[`T${j + 1}`] ?? 80;
                       return (
                         <td
                           key={j}
                           className={`px-3 py-2 text-center font-medium ${
-                            isHot
+                            t > limit
                               ? "bg-orange-50 text-orange-600"
                               : "text-gray-800"
                           }`}
                         >
-                          {isHot ? `🔥 ${t}` : t}
+                          {t > limit ? `🔥 ${t}` : t}
                         </td>
                       );
                     })}
