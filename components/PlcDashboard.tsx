@@ -119,7 +119,7 @@ export default function PlcDashboard() {
       const res = await fetch("/api/plc/status");
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
-
+      console.log("PLC Status : ", data.isRunning);
       setPlcStatus(data.isRunning);
       setAlarm({ active: data.alarm, reason: data.reason });
 

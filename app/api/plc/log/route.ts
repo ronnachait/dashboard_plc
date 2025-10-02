@@ -3,15 +3,6 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    // ✅ ตรวจสอบ API Key ก่อน
-    const apiKey = req.headers.get("x-api-key");
-    if (apiKey !== process.env.PI_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     if (!Array.isArray(body.pressure) || !Array.isArray(body.temperature)) {
       return NextResponse.json(

@@ -28,7 +28,7 @@ export async function GET() {
     const lastStatus = await prisma.plcStatus.findFirst({
       orderBy: { updatedAt: "desc" },
     });
-
+    console.log(lastStatus);
     if (!lastStatus) {
       return NextResponse.json({ error: "No status found" }, { status: 404 });
     }
