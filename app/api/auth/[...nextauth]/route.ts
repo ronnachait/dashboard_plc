@@ -71,10 +71,7 @@ const authOptions: NextAuthOptions = {
         target.host = safeBase.host;
 
         return target.toString();
-      } catch (e) {
-        // fallback: กลับไป root
-        console.error("Redirect error:", e);
-
+      } catch {
         return appUrl;
       }
     },

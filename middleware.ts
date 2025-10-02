@@ -27,8 +27,11 @@ export async function middleware(req: NextRequest) {
   // ✅ ถ้าไม่ใช่ Pi → ต้อง login
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
-    const signInUrl = new URL("/auth/login", req.url);
-    signInUrl.searchParams.set("callbackUrl", req.url);
+    const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+
+    // ใช้ path เดิมจาก req ไม่ใช้ host มั่ว
+    const signInUrl = new URL("/auth/login", appUrl);
+    signInUrl.searchParams.set("callbackUrl", `${appUrl}${pathname}`);
     return NextResponse.redirect(signInUrl);
   }
 
