@@ -81,13 +81,14 @@ export default function SensorGauge({
           />
         </svg>
         <p className={`absolute text-sm font-bold ${color.text}`}>
-          {value.toFixed(1)}
+          {typeof value === "number" ? value.toFixed(1) : "N/A"}
         </p>
       </div>
 
       {/* Footer */}
       <p className="text-[11px] text-gray-600">
-        {percent.toFixed(0)}% of {maxValue} {unit}
+        {typeof percent === "number" ? percent.toFixed(0) : "N/A"}% of{" "}
+        {maxValue} {unit}
       </p>
     </div>
   );

@@ -2,7 +2,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { DatabaseBackup, Gauge, History, LogOut, Router } from "lucide-react";
+import {
+  DatabaseBackup,
+  Fuel,
+  Gauge,
+  History,
+  LogOut,
+  Router,
+} from "lucide-react";
 import FloatingActionMenu from "./ui/floating-action-menu";
 import { signOut } from "next-auth/react";
 
@@ -16,6 +23,11 @@ export default function FloatingMenuWrapper() {
           label: "Dashboard",
           Icon: <Gauge className="w-4 h-4" />,
           onClick: () => router.push("/plc"),
+        },
+        {
+          label: "Fuel Use",
+          Icon: <Fuel className="w-4 h-4" />,
+          onClick: () => router.push("/fuel-use"),
         },
         {
           label: "Raspberry pi5",

@@ -103,7 +103,7 @@ export function PlcLogTable({
                                     : "bg-slate-100 text-slate-700"
                                 }`}
                               >
-                                {p.toFixed(2)}
+                                {typeof p === "number" ? p.toFixed(2) : "N/A"}
                               </span>
                             </TooltipTrigger>
                             {isAlarm && (
@@ -136,7 +136,7 @@ export function PlcLogTable({
                                     : "bg-slate-100 text-slate-700"
                                 }`}
                               >
-                                {t.toFixed(1)}
+                                {typeof t === "number" ? t.toFixed(1) : "N/A"}
                               </span>
                             </TooltipTrigger>
                             {isAlarm && (

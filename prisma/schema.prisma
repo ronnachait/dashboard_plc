@@ -56,3 +56,31 @@ model User {
   password String
   role     String
 }
+
+
+
+enum Shift {
+  MORNING
+  NIGHT
+}
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  name      String
+  plateNo   String?
+  fuelLogs  FuelLog[]
+}
+
+model FuelLog {
+  id        String   @id @default(uuid())
+  date      DateTime @default(now())
+  shift     Shift?
+  shiftDate DateTime?   // ✅ เพิ่มกลับมาแบบ optional
+  fuelIn    Float
+  fuelUsed  Float
+  note      String?
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+}
+
+
