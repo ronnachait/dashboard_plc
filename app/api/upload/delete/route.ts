@@ -15,28 +15,30 @@ const blobServiceClient = new BlobServiceClient(
 );
 
 export async function POST(req: Request) {
-  const { blobUrl } = await req.json();
-
-  if (!blobUrl) {
-    return NextResponse.json({ error: "Missing blobUrl" }, { status: 400 });
-  }
-
   try {
-    // 🔎 ดึง blobName จาก public URL
-    const url = new URL(blobUrl);
-    const blobName = url.pathname.replace(`/${containerName}/`, "");
+    const body = await req.json().catch(() => null);
+
+    if (!body || !body.blobName) {
+      return NextResponse.json(
+        { error: "❌ Missing blobName" },
+        { status: 400 }
+      );
+    }
+
+    const { blobName } = body;
+    console.log("🗑 Deleting blob:", blobName);
 
     const containerClient = blobServiceClient.getContainerClient(containerName);
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    const blobClient = containerClient.getBlobClient(blobName);
 
-    await blockBlobClient.deleteIfExists();
+    await blobClient.deleteIfExists();
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, deleted: blobName });
   } catch (err: unknown) {
     if (err instanceof Error) {
-      console.error("❌ Delete error:", err.message);
+      console.error("❌ Delete error:", err);
       return NextResponse.json(
-        { error: "Failed to delete blob" },
+        { error: err.message || "Internal server error" },
         { status: 500 }
       );
     }
