@@ -45,6 +45,19 @@ type ApiLog = {
   createdAt: string;
 };
 
+type GreasePointAlert = {
+  id: string;
+  pointNo: number;
+  name: string;
+  nextDueHour: number;
+  vehicle: {
+    id: string;
+    name: string;
+    plateNo?: string | null;
+    lastHourAfterTest?: number | null;
+  };
+};
+
 type SortOrder = "asc" | "desc";
 
 export default function PlcDashboard() {
@@ -57,6 +70,7 @@ export default function PlcDashboard() {
   const [buttonsDisabled, setButtonsDisabled] = useState(true);
   const [loading, setLoading] = useState<"SET" | "RST" | null>(null);
   const [plcNoResponse, setPlcNoResponse] = useState(false);
+  const [greaseAlerts, setGreaseAlerts] = useState<GreasePointAlert[]>([]);
 
   const [alarm, setAlarm] = useState<{ active: boolean; reason: string }>({
     active: false,
@@ -83,6 +97,32 @@ export default function PlcDashboard() {
       toast.error("Request failed");
     }
   };
+
+  useEffect(() => {
+    const fetchGrease = async () => {
+      try {
+        const res = await fetch("/api/grease");
+        if (!res.ok) return;
+        const data = await res.json();
+        console.log("Grease Alerts", data);
+        const alerts: GreasePointAlert[] = data.points.filter(
+          (p: GreasePointAlert) =>
+            (p.vehicle.lastHourAfterTest ?? 0) >= p.nextDueHour
+        );
+
+        setGreaseAlerts(alerts);
+        if (alerts.length > 0) {
+          toast.error(`🚨 มีจุดอัดจารบีเกินรอบ ${alerts.length} จุด`);
+        }
+      } catch (err) {
+        console.error("⚠️ Grease fetch failed:", err);
+      }
+    };
+
+    fetchGrease();
+    const interval = setInterval(fetchGrease, 60000); // 🔄 เช็คทุก 1 นาที
+    return () => clearInterval(interval);
+  }, []);
 
   // ✅ โหลด history ครั้งแรก
   useEffect(() => {
@@ -199,6 +239,9 @@ export default function PlcDashboard() {
       "T4",
       "T5",
       "T6",
+      "T7",
+      "T8",
+      "T9",
     ];
     const rows = logs.map((l) =>
       [l.createdAt, ...l.pressure, ...l.temperature].join(",")
@@ -235,6 +278,18 @@ export default function PlcDashboard() {
         <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 flex items-center gap-2 shadow">
           <AlertTriangle className="h-5 w-5 text-red-600" />
           <span className="font-semibold">❌ ไม่สามารถเชื่อมต่อ PLC ได้</span>
+        </div>
+      )}
+      {greaseAlerts.length > 0 && (
+        <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 shadow">
+          <h2 className="font-bold flex items-center gap-2">🛢️ Alarm จารบี</h2>
+          <ul className="list-disc ml-6 mt-2">
+            {greaseAlerts.map((g) => (
+              <li key={g.id}>
+                จุด {g.pointNo}: {g.name} — ถึงรอบที่ {g.nextDueHour} ชม.
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -293,6 +348,7 @@ export default function PlcDashboard() {
           </h3>
 
           <div className="grid grid-cols-3 gap-2">
+            {/* START */}
             <button
               onClick={() => handleClick("SET")}
               disabled={
@@ -302,38 +358,48 @@ export default function PlcDashboard() {
                 loading !== null
               }
               className="px-2 py-2 rounded-md text-xs font-bold 
-                 bg-green-600 hover:bg-green-700 text-white 
-                 shadow-sm hover:shadow transition disabled:bg-gray-300"
+               bg-green-600 hover:bg-green-700 text-white 
+               shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
               {loading === "SET" ? (
-                <Loader2 className="animate-spin h-3 w-3 mx-auto" />
+                <Loader2 className="animate-spin h-4 w-4 mx-auto" />
               ) : (
-                "▶ START"
+                <>
+                  <span className="md:hidden">▶</span> {/* Mobile: แค่ icon */}
+                  <span className="hidden md:inline">▶ START</span>{" "}
+                  {/* Desktop: text */}
+                </>
               )}
             </button>
 
+            {/* STOP */}
             <button
               onClick={() => handleClick("RST")}
               disabled={buttonsDisabled || loading !== null}
               className="px-2 py-2 rounded-md text-xs font-bold 
-                 bg-red-600 hover:bg-red-700 text-white 
-                 shadow-sm hover:shadow transition disabled:bg-gray-300"
+               bg-red-600 hover:bg-red-700 text-white 
+               shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
               {loading === "RST" ? (
-                <Loader2 className="animate-spin h-3 w-3 mx-auto" />
+                <Loader2 className="animate-spin h-4 w-4 mx-auto" />
               ) : (
-                "■ STOP"
+                <>
+                  <span className="md:hidden">■</span>
+                  <span className="hidden md:inline">■ STOP</span>
+                </>
               )}
             </button>
 
+            {/* RESET */}
             <button
               onClick={() => handleClick("RESET")}
               disabled={!alarm.active || buttonsDisabled}
               className="px-2 py-2 rounded-md text-xs font-bold 
-                 bg-yellow-500 hover:bg-yellow-600 text-white 
-                 shadow-sm hover:shadow transition disabled:bg-gray-300"
+               bg-yellow-500 hover:bg-yellow-600 text-white 
+               shadow-sm hover:shadow transition disabled:bg-gray-300"
             >
-              🔄 RESET
+              <span className="md:hidden">🔄</span>
+              <span className="hidden md:inline">🔄 RESET</span>
             </button>
           </div>
 
@@ -343,52 +409,15 @@ export default function PlcDashboard() {
           />
         </div>
       </div>
-
-      {/* Sensor Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Pressure */}
-        <div className="space-y-2">
+      {/* Sensor Zones */}
+      <div className="space-y-8">
+        {/* 🔵 Cylinder Bench Test */}
+        <div className="p-4 rounded-lg shadow border bg-white">
+          <h2 className="text-lg font-bold text-blue-600 mb-3">
+            🔵 Cylinder Bench Test
+          </h2>
           <SensorChart
-            title="Pressure Sensors / ความดัน"
-            labels={logs.map((l) => l.createdAt)}
-            datasets={[
-              {
-                label: "P1",
-                data: logs.map((l) => l.pressure[0]),
-                color: "#ef4444",
-              },
-              {
-                label: "P2",
-                data: logs.map((l) => l.pressure[1]),
-                color: "#f97316",
-              },
-              {
-                label: "P3",
-                data: logs.map((l) => l.pressure[2]),
-                color: "#a855f7",
-              },
-            ]}
-            maxY={12}
-            threshold={{ value: 6, color: "red", label: "Max Pressure 6 bar" }}
-          />
-          <div className="grid grid-cols-3 gap-2">
-            {latest &&
-              latest.pressure.map((p, i) => (
-                <SensorGauge
-                  key={`P${i + 1}`}
-                  label={`P${i + 1}`}
-                  value={p}
-                  unit="bar"
-                  maxValue={settings[`P${i + 1}`] ?? 12}
-                />
-              ))}
-          </div>
-        </div>
-
-        {/* Temperature */}
-        <div className="space-y-2">
-          <SensorChart
-            title="Temperature Sensors / อุณหภูมิ"
+            title="Cylinder Temperature (3 จุด)"
             labels={logs.map((l) => l.createdAt)}
             datasets={[
               {
@@ -406,36 +435,115 @@ export default function PlcDashboard() {
                 data: logs.map((l) => l.temperature[2]),
                 color: "#1e40af",
               },
-              {
-                label: "T4",
-                data: logs.map((l) => l.temperature[3]),
-                color: "#22c55e",
-              },
-              {
-                label: "T5",
-                data: logs.map((l) => l.temperature[4]),
-                color: "#84cc16",
-              },
-              {
-                label: "T6",
-                data: logs.map((l) => l.temperature[5]),
-                color: "#0d9488",
-              },
             ]}
             maxY={120}
             threshold={{ value: 80, color: "orange", label: "Max Temp 80°C" }}
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 mt-2">
             {latest &&
-              latest.temperature.map((t, i) => (
-                <SensorGauge
-                  key={`T${i + 1}`}
-                  label={`T${i + 1}`}
-                  value={t}
-                  unit="°C"
-                  maxValue={settings[`T${i + 1}`] ?? 80}
-                />
-              ))}
+              latest.temperature
+                .slice(0, 3)
+                .map((t, i) => (
+                  <SensorGauge
+                    key={`T${i + 1}`}
+                    label={`T${i + 1}`}
+                    value={t}
+                    unit="°C"
+                    maxValue={settings[`T${i + 1}`] ?? 80}
+                  />
+                ))}
+          </div>
+        </div>
+
+        {/* 🟢 Chopper Bench Test */}
+        <div className="p-4 rounded-lg shadow border bg-white">
+          <h2 className="text-lg font-bold text-green-600 mb-3">
+            🟢 Chopper Bench Test
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Pressure */}
+            <div>
+              <SensorChart
+                title="Chopper Pressure (3 จุด)"
+                labels={logs.map((l) => l.createdAt)}
+                datasets={[
+                  {
+                    label: "P1",
+                    data: logs.map((l) => l.pressure[0]),
+                    color: "#ef4444",
+                  },
+                  {
+                    label: "P2",
+                    data: logs.map((l) => l.pressure[1]),
+                    color: "#f97316",
+                  },
+                  {
+                    label: "P3",
+                    data: logs.map((l) => l.pressure[2]),
+                    color: "#a855f7",
+                  },
+                ]}
+                maxY={12}
+                threshold={{
+                  value: 6,
+                  color: "red",
+                  label: "Max Pressure 6 bar",
+                }}
+              />
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {latest &&
+                  latest.pressure.map((p, i) => (
+                    <SensorGauge
+                      key={`P${i + 1}`}
+                      label={`P${i + 1}`}
+                      value={p}
+                      unit="bar"
+                      maxValue={settings[`P${i + 1}`] ?? 12}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            {/* Temperature */}
+            <div>
+              <SensorChart
+                title="Chopper Temperature (6 จุด)"
+                labels={logs.map((l) => l.createdAt)}
+                datasets={Array.from({ length: 6 }, (_, i) => ({
+                  label: `T${i + 4}`,
+                  data: logs.map((l) => l.temperature[i + 3]),
+                  color: [
+                    "#22c55e",
+                    "#84cc16",
+                    "#0d9488",
+                    "#f59e0b",
+                    "#d946ef",
+                    "#ef4444",
+                  ][i],
+                }))}
+                maxY={120}
+                threshold={{
+                  value: 80,
+                  color: "orange",
+                  label: "Max Temp 80°C",
+                }}
+              />
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-2">
+                {latest &&
+                  latest.temperature
+                    .slice(3, 9)
+                    .map((t, i) => (
+                      <SensorGauge
+                        key={`T${i + 4}`}
+                        label={`T${i + 4}`}
+                        value={t}
+                        unit="°C"
+                        maxValue={settings[`T${i + 4}`] ?? 80}
+                      />
+                    ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -471,7 +579,7 @@ export default function PlcDashboard() {
                     P{i + 1} (bar)
                   </th>
                 ))}
-                {Array.from({ length: 6 }, (_, i) => (
+                {Array.from({ length: 9 }, (_, i) => (
                   <th key={i} className="px-3 py-2 text-center font-semibold">
                     T{i + 1} (°C)
                   </th>

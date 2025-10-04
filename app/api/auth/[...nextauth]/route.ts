@@ -2,9 +2,10 @@ import NextAuth, { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
-import { User } from "@prisma/client"; // ✅ ใช้ตรงนี้แทน Prisma.User
+import { User } from "@prisma/client";
 
-const authOptions: NextAuthOptions = {
+// 👇 export ด้วย
+export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
@@ -28,19 +29,16 @@ const authOptions: NextAuthOptions = {
       },
     }),
   ],
-
   pages: {
     signIn: "/auth/login",
   },
-
   session: {
     strategy: "jwt",
-    maxAge: 8 * 60 * 60,
+    maxAge: 8 * 60 * 60, // 8 ชม.
   },
   jwt: {
     maxAge: 8 * 60 * 60,
   },
-
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -61,12 +59,9 @@ const authOptions: NextAuthOptions = {
       const appUrl = process.env.NEXTAUTH_URL || baseUrl;
 
       try {
-        const target = new URL(url, appUrl); // ใช้ appUrl เป็น base เผื่อ url เป็นแค่ path
-
-        // ใช้ host/domain จาก NEXTAUTH_URL เสมอ
+        const target = new URL(url, appUrl);
         const safeBase = new URL(appUrl);
 
-        // replace host + protocol ให้ตรงกับ NEXTAUTH_URL
         target.protocol = safeBase.protocol;
         target.host = safeBase.host;
 

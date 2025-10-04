@@ -33,7 +33,7 @@
     "global.d.ts",
     "lib/plc-mock-server.js",
     "next-env.d.ts",
-    "prisma/seed.js",
+    "prisma/seed.ts",
     "types/**/*.d.ts",
     ".next/types/**/*.ts",
     "next.config.ts"

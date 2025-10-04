@@ -164,17 +164,20 @@ export default function HistoryByDate() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center text-sm">
+      <div className="flex flex-wrap gap-4 items-center text-sm">
         <div>
           Action:{" "}
           <select
             value={filterAction}
             onChange={(e) => setFilterAction(e.target.value)}
-            className="ml-1 text-xs text-black rounded border px-1 py-0.5"
+            className="ml-1 text-xs text-black rounded border px-2 py-1"
           >
             <option value="">All</option>
-            <option value="OK">OK</option>
-            <option value="STOP">STOP</option>
+            <option value="ALARM_STILL_ACTIVE">🚨 ALARM_STILL_ACTIVE</option>
+            <option value="STOP_BY_ALARM">🛑 STOP_BY_ALARM</option>
+            <option value="START_BY_USER">▶ START_BY_USER</option>
+            <option value="STOP_BY_USER">⏹ STOP_BY_USER</option>
+            <option value="RESET_ALARM">♻ RESET_ALARM</option>
           </select>
         </div>
         <div>
@@ -183,7 +186,7 @@ export default function HistoryByDate() {
             value={filterReason}
             onChange={(e) => setFilterReason(e.target.value)}
             placeholder="ค้นหา reason"
-            className="ml-1 px-2 py-0.5 text-xs text-black border rounded"
+            className="ml-1 px-2 py-1 text-xs text-black border rounded"
           />
         </div>
       </div>

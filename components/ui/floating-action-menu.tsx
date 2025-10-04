@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 
 type FloatingActionMenuProps = {
   options: {
@@ -20,14 +21,14 @@ const FloatingActionMenu = ({
   className,
 }: FloatingActionMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
-
+  const { data: session } = useSession(); // ✅ เอามาเช็ค login
   const toggleMenu = () => setIsOpen((prev) => !prev);
 
   const handleOptionClick = (onClick: () => void) => {
     onClick();
     setIsOpen(false);
   };
-
+  if (!session) return null;
   return (
     <div className={cn("fixed bottom-8 right-8 z-50", className)}>
       {/* ปุ่มหลัก */}

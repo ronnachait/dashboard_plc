@@ -99,21 +99,22 @@ export default function SettingsSync({
           ⚙️ SETTINGS
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>⚙️ PLC Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* PRESSURE */}
-          <div>
-            <h3 className="text-sm font-semibold mb-2 text-gray-700">
-              Pressure Sensors (bar)
+        <div className="space-y-8">
+          {/* 🟢 Cylinder Bench Test */}
+          <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
+            <h3 className="text-sm font-bold mb-3 text-blue-600">
+              🟢 Cylinder Bench Test (Temperature T1–T3)
             </h3>
-            <div className="grid grid-cols-3 gap-4">
-              {["P1", "P2", "P3"].map((s) => (
-                <div key={s} className="p-3 bg-gray-50 rounded border">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {["T1", "T2", "T3"].map((s) => (
+                <div key={s} className="p-3 bg-white rounded border shadow-sm">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
                     {s}
                   </label>
                   <input
@@ -128,31 +129,67 @@ export default function SettingsSync({
             </div>
           </div>
 
-          {/* TEMPERATURE */}
-          <div>
-            <h3 className="text-sm font-semibold mb-2 text-gray-700">
-              Temperature Sensors (°C)
+          {/* 🔴 Chopper Bench Test */}
+          <div className="p-4 border rounded-lg bg-gray-50 shadow-sm">
+            <h3 className="text-sm font-bold mb-3 text-green-600">
+              🔴 Chopper Bench Test (Pressure P1–P3 + Temperature T4–T9)
             </h3>
-            <div className="grid grid-cols-3 gap-4">
-              {Array.from({ length: 6 }, (_, i) => `T${i + 1}`).map((s) => (
-                <div key={s} className="p-3 bg-gray-50 rounded border">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    {s}
-                  </label>
-                  <input
-                    type="number"
-                    value={settings[s] ?? ""}
-                    onChange={(e) => updateValue(s, Number(e.target.value))}
-                    disabled={!isAdmin}
-                    className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
-                  />
-                </div>
-              ))}
+
+            {/* Pressure */}
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-gray-500 mb-2">
+                Pressure Sensors (bar)
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {["P1", "P2", "P3"].map((s) => (
+                  <div
+                    key={s}
+                    className="p-3 bg-white rounded border shadow-sm"
+                  >
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      {s}
+                    </label>
+                    <input
+                      type="number"
+                      value={settings[s] ?? ""}
+                      onChange={(e) => updateValue(s, Number(e.target.value))}
+                      disabled={!isAdmin}
+                      className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Temperature */}
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 mb-2">
+                Temperature Sensors (°C)
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {Array.from({ length: 6 }, (_, i) => `T${i + 4}`).map((s) => (
+                  <div
+                    key={s}
+                    className="p-3 bg-white rounded border shadow-sm"
+                  >
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      {s}
+                    </label>
+                    <input
+                      type="number"
+                      value={settings[s] ?? ""}
+                      onChange={(e) => updateValue(s, Number(e.target.value))}
+                      disabled={!isAdmin}
+                      className="w-full rounded px-2 py-1 border text-center font-semibold text-gray-800 disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* BUTTONS */}
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-3">
             {isAdmin ? (
               <Button
                 className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500"

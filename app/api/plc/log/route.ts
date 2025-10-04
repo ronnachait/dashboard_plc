@@ -4,7 +4,16 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    if (!Array.isArray(body.pressure) || !Array.isArray(body.temperature)) {
+
+    // ✅ Extract data จาก payload ใหม่
+    const cylinderTemps = body.cylinder?.temperature ?? [];
+    const chopperTemps = body.chopper?.temperature ?? [];
+    const pressures = body.chopper?.pressure ?? [];
+
+    // ✅ รวมอุณหภูมิทั้งหมด (Cylinder + Chopper)
+    const temperatures = [...cylinderTemps, ...chopperTemps];
+
+    if (!Array.isArray(pressures) || !Array.isArray(temperatures)) {
       return NextResponse.json(
         { success: false, error: "Invalid payload" },
         { status: 400 }
@@ -13,8 +22,8 @@ export async function POST(req: Request) {
 
     const log = await prisma.plcLog.create({
       data: {
-        pressure: body.pressure,
-        temperature: body.temperature,
+        pressure: pressures,
+        temperature: temperatures,
         action: body.action ?? "OK",
         reason: Array.isArray(body.reason)
           ? body.reason.join(", ")

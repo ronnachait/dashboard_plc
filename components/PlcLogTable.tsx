@@ -10,7 +10,13 @@ export type PlcLog = {
   createdAt: string;
   pressure: number[];
   temperature: number[];
-  action: "OK" | "STOP" | string;
+  action:
+    | "ALARM_STILL_ACTIVE"
+    | "STOP_BY_ALARM"
+    | "START_BY_USER"
+    | "STOP_BY_USER"
+    | "RESET_ALARM"
+    | string;
   reason?: string | null;
 };
 
@@ -21,6 +27,24 @@ export function PlcLogTable({
   logs: PlcLog[];
   loading: boolean;
 }) {
+  // ✅ Map สี/label ให้ Action
+  const getActionStyle = (action: string) => {
+    switch (action) {
+      case "ALARM_STILL_ACTIVE":
+        return "bg-gradient-to-r from-yellow-200 to-yellow-300 text-yellow-800";
+      case "STOP_BY_ALARM":
+        return "bg-gradient-to-r from-red-500 to-red-700 text-white";
+      case "START_BY_USER":
+        return "bg-gradient-to-r from-green-400 to-green-600 text-white";
+      case "STOP_BY_USER":
+        return "bg-gradient-to-r from-pink-400 to-pink-600 text-white";
+      case "RESET_ALARM":
+        return "bg-gradient-to-r from-blue-400 to-blue-600 text-white";
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
+
   return (
     <TooltipProvider>
       <div className="max-h-[500px] overflow-y-auto rounded-xl border border-slate-200 shadow-lg bg-white relative">
@@ -152,16 +176,14 @@ export function PlcLogTable({
                     })}
 
                     {/* Action */}
-                    <td
-                      className={`px-4 py-2 text-center font-bold tracking-wide ${
-                        l.action === "OK"
-                          ? "text-green-600"
-                          : l.action === "STOP"
-                          ? "text-red-600"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      {l.action}
+                    <td className="px-4 py-2 text-center">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide shadow ${getActionStyle(
+                          l.action
+                        )}`}
+                      >
+                        {l.action}
+                      </span>
                     </td>
 
                     {/* Reason badges */}

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "public"."GreasePoint" ADD COLUMN     "picture" TEXT,
+ADD COLUMN     "positions" TEXT,
+ALTER COLUMN "lastGreaseHour" SET DATA TYPE DOUBLE PRECISION,
+ALTER COLUMN "nextDueHour" SET DATA TYPE DOUBLE PRECISION;

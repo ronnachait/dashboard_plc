@@ -46,7 +46,7 @@ export default function FuelHistoryPage() {
         <CardHeader>
           <CardTitle className="text-lg md:text-xl font-bold flex items-center gap-2">
             <Fuel className="w-5 h-5 text-green-600" />
-            📊 ประวัติการใช้น้ำมัน
+            ประวัติการใช้น้ำมัน
           </CardTitle>
         </CardHeader>
         <CardContent>

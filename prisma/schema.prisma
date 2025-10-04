@@ -12,10 +12,9 @@ model PlcLog {
   createdAt   DateTime @default(now())
   pressure    Float[]
   temperature Float[]
-  action      String   @default("OK")   // 👈 เพิ่ม default
+  action      String   @default("OK") // 👈 เพิ่ม default
   reason      String?
 }
-
 
 model PlcSetting {
   id        String   @id @default(uuid())
@@ -25,12 +24,11 @@ model PlcSetting {
   updatedAt DateTime @updatedAt
 }
 
-
 model PlcStatus {
   id        String   @id @default(uuid())
-  isRunning Boolean  @default(false)  // ✅ แทน M1000
-  alarm     Boolean  @default(false)  // alarm มีหรือเปล่า
-  reason    String?                   // เหตุผล alarm
+  isRunning Boolean  @default(false) // ✅ แทน M1000
+  alarm     Boolean  @default(false) // alarm มีหรือเปล่า
+  reason    String? // เหตุผล alarm
   updatedAt DateTime @updatedAt
 }
 
@@ -50,14 +48,12 @@ model NgrokTunnel {
 }
 
 model User {
-  id       String   @id @default(uuid())
+  id       String  @id @default(uuid())
   name     String?
-  email    String   @unique
+  email    String  @unique
   password String
   role     String
 }
-
-
 
 enum Shift {
   MORNING
@@ -65,22 +61,43 @@ enum Shift {
 }
 
 model Vehicle {
-  id        String   @id @default(uuid())
-  name      String
-  plateNo   String?
-  fuelLogs  FuelLog[]
+  id                 String   @id @default(uuid())
+  name               String
+  plateNo            String?
+  lastHourBeforeTest Float?
+  lastHourAfterTest  Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt @default(now())
+  fuelLogs           FuelLog[]
+  greasePoints       GreasePoint[]
 }
 
+
+
 model FuelLog {
-  id        String   @id @default(uuid())
-  date      DateTime @default(now())
+  id        String    @id @default(uuid())
+  date      DateTime  @default(now())
   shift     Shift?
-  shiftDate DateTime?   // ✅ เพิ่มกลับมาแบบ optional
+  shiftDate DateTime? // ✅ เพิ่มกลับมาแบบ optional
   fuelIn    Float
   fuelUsed  Float
   note      String?
   vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicle   Vehicle   @relation(fields: [vehicleId], references: [id])
 }
 
+model GreasePoint {
+  id             String   @id @default(uuid())
+  pointNo        Int      // จุดที่ (1..32)
+  name           String   // ชื่อหลัก
+  fittings       Int      // จำนวนหัวอัด (QTY)
+  positions      String?  // ตำแหน่งย่อย เช่น LH, RH
+  detail         String?  // รายละเอียดเพิ่มเติม
+  intervalHours  Int      // รอบการอัด (ชม.)
+  lastGreaseHour Float    // ชั่วโมงล่าสุดที่อัด
+  nextDueHour    Float    // ชั่วโมงที่ครบกำหนดถัดไป
+  picture        String?  // path รูปประกอบ
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id])
+}
 
