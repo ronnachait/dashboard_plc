@@ -59,7 +59,7 @@ export function PlcLogTable({
                   P{i + 1} <span className="text-[11px]">(bar)</span>
                 </th>
               ))}
-              {Array.from({ length: 6 }, (_, i) => (
+              {Array.from({ length: 9 }, (_, i) => (
                 <th key={i} className="px-4 py-3 text-center">
                   T{i + 1} <span className="text-[11px]">(°C)</span>
                 </th>
@@ -121,7 +121,7 @@ export function PlcLogTable({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span
-                                className={`inline-block px-2 py-1 rounded-full font-mono text-xs min-w-[55px] transition ${
+                                className={`inline-flex items-center justify-center w-12 h-6 rounded-full font-mono text-xs transition ${
                                   isAlarm
                                     ? "bg-gradient-to-br from-red-500 to-red-700 text-white shadow-md animate-pulse"
                                     : "bg-slate-100 text-slate-700"
@@ -178,7 +178,7 @@ export function PlcLogTable({
                     {/* Action */}
                     <td className="px-4 py-2 text-center">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide shadow ${getActionStyle(
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide shadow-sm whitespace-nowrap ${getActionStyle(
                           l.action
                         )}`}
                       >
@@ -193,7 +193,7 @@ export function PlcLogTable({
                           {reasons.map((r, idx) => (
                             <span
                               key={idx}
-                              className={`px-2 py-0.5 rounded-md text-[11px] font-medium shadow-sm ${
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-medium shadow-sm ${
                                 r.startsWith("T")
                                   ? "bg-gradient-to-r from-orange-200 to-orange-300 text-orange-800"
                                   : "bg-gradient-to-r from-red-200 to-red-300 text-red-800"

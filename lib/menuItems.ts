@@ -6,11 +6,13 @@ import {
   History,
   DatabaseBackup,
   LogOut,
+  Bubbles,
 } from "lucide-react";
 
 export const menuItems = [
   { label: "Dashboard", Icon: Gauge, path: "/plc" },
   { label: "Fuel Use", Icon: Fuel, path: "/fuel-use" },
+  { label: "Grease", Icon: Bubbles, path: "/grease" },
   { label: "Raspberry Pi5", Icon: Router, path: "/pi-moniter" },
   { label: "History", Icon: History, path: "/history" },
   { label: "Backup", Icon: DatabaseBackup, path: "/backup" },

@@ -224,7 +224,14 @@ export default function PlcDashboard() {
   }, []);
 
   const latest = logs[0];
-
+  useEffect(() => {
+    if (latest) {
+      console.log("📡 Latest data:", {
+        pressure: latest.pressure,
+        temperature: latest.temperature,
+      });
+    }
+  }, [latest]);
   // ✅ CSV Export
   const exportToCSV = () => {
     if (!logs.length) return;
@@ -416,42 +423,41 @@ export default function PlcDashboard() {
           <h2 className="text-lg font-bold text-blue-600 mb-3">
             🔵 Cylinder Bench Test
           </h2>
+          {/* Cylinder Temp (3 จุด) */}
           <SensorChart
             title="Cylinder Temperature (3 จุด)"
             labels={logs.map((l) => l.createdAt)}
             datasets={[
               {
                 label: "T1",
-                data: logs.map((l) => l.temperature[0]),
+                data: logs.map((l) => l.temperature?.[0] ?? 0),
                 color: "#3b82f6",
               },
               {
                 label: "T2",
-                data: logs.map((l) => l.temperature[1]),
+                data: logs.map((l) => l.temperature?.[1] ?? 0),
                 color: "#06b6d4",
               },
               {
                 label: "T3",
-                data: logs.map((l) => l.temperature[2]),
+                data: logs.map((l) => l.temperature?.[2] ?? 0),
                 color: "#1e40af",
               },
             ]}
             maxY={120}
             threshold={{ value: 80, color: "orange", label: "Max Temp 80°C" }}
           />
+
           <div className="grid grid-cols-3 gap-2 mt-2">
-            {latest &&
-              latest.temperature
-                .slice(0, 3)
-                .map((t, i) => (
-                  <SensorGauge
-                    key={`T${i + 1}`}
-                    label={`T${i + 1}`}
-                    value={t}
-                    unit="°C"
-                    maxValue={settings[`T${i + 1}`] ?? 80}
-                  />
-                ))}
+            {(latest?.temperature ?? []).slice(0, 3).map((t, i) => (
+              <SensorGauge
+                key={`T${i + 1}`}
+                label={`T${i + 1}`}
+                value={t ?? 0}
+                unit="°C"
+                maxValue={settings[`T${i + 1}`] ?? 80}
+              />
+            ))}
           </div>
         </div>
 
@@ -464,23 +470,24 @@ export default function PlcDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Pressure */}
             <div>
+              {/* Chopper Pressure (3 จุด) */}
               <SensorChart
                 title="Chopper Pressure (3 จุด)"
                 labels={logs.map((l) => l.createdAt)}
                 datasets={[
                   {
                     label: "P1",
-                    data: logs.map((l) => l.pressure[0]),
+                    data: logs.map((l) => l.pressure?.[0] ?? 0),
                     color: "#ef4444",
                   },
                   {
                     label: "P2",
-                    data: logs.map((l) => l.pressure[1]),
+                    data: logs.map((l) => l.pressure?.[1] ?? 0),
                     color: "#f97316",
                   },
                   {
                     label: "P3",
-                    data: logs.map((l) => l.pressure[2]),
+                    data: logs.map((l) => l.pressure?.[2] ?? 0),
                     color: "#a855f7",
                   },
                 ]}
@@ -491,28 +498,29 @@ export default function PlcDashboard() {
                   label: "Max Pressure 6 bar",
                 }}
               />
+
               <div className="grid grid-cols-3 gap-2 mt-2">
-                {latest &&
-                  latest.pressure.map((p, i) => (
-                    <SensorGauge
-                      key={`P${i + 1}`}
-                      label={`P${i + 1}`}
-                      value={p}
-                      unit="bar"
-                      maxValue={settings[`P${i + 1}`] ?? 12}
-                    />
-                  ))}
+                {(latest?.pressure ?? []).map((p, i) => (
+                  <SensorGauge
+                    key={`P${i + 1}`}
+                    label={`P${i + 1}`}
+                    value={p ?? 0}
+                    unit="bar"
+                    maxValue={settings[`P${i + 1}`] ?? 12}
+                  />
+                ))}
               </div>
             </div>
 
             {/* Temperature */}
             <div>
+              {/* Chopper Temperature (6 จุด) */}
               <SensorChart
                 title="Chopper Temperature (6 จุด)"
                 labels={logs.map((l) => l.createdAt)}
                 datasets={Array.from({ length: 6 }, (_, i) => ({
                   label: `T${i + 4}`,
-                  data: logs.map((l) => l.temperature[i + 3]),
+                  data: logs.map((l) => l.temperature?.[i + 3] ?? 0),
                   color: [
                     "#22c55e",
                     "#84cc16",
@@ -529,19 +537,17 @@ export default function PlcDashboard() {
                   label: "Max Temp 80°C",
                 }}
               />
+
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-2">
-                {latest &&
-                  latest.temperature
-                    .slice(3, 9)
-                    .map((t, i) => (
-                      <SensorGauge
-                        key={`T${i + 4}`}
-                        label={`T${i + 4}`}
-                        value={t}
-                        unit="°C"
-                        maxValue={settings[`T${i + 4}`] ?? 80}
-                      />
-                    ))}
+                {(latest?.temperature ?? []).slice(3, 9).map((t, i) => (
+                  <SensorGauge
+                    key={`T${i + 4}`}
+                    label={`T${i + 4}`}
+                    value={t ?? 0}
+                    unit="°C"
+                    maxValue={settings[`T${i + 4}`] ?? 80}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -598,8 +604,18 @@ export default function PlcDashboard() {
                     <td className="px-3 py-2 font-mono text-gray-700">
                       {l.createdAt}
                     </td>
-                    {l.pressure.map((p, j) => {
+                    {(l.pressure ?? []).map((p, j) => {
                       const limit = settings[`P${j + 1}`] ?? 6;
+                      if (p == null) {
+                        return (
+                          <td
+                            key={j}
+                            className="px-3 py-2 text-center text-gray-400 italic"
+                          >
+                            N/A
+                          </td>
+                        );
+                      }
                       return (
                         <td
                           key={j}
@@ -613,18 +629,28 @@ export default function PlcDashboard() {
                         </td>
                       );
                     })}
-                    {l.temperature.map((t, j) => {
+                    {(l.temperature ?? []).map((t, j) => {
                       const limit = settings[`T${j + 1}`] ?? 80;
+                      if (t == null) {
+                        return (
+                          <td
+                            key={j}
+                            className="px-3 py-2 text-center text-gray-400 italic"
+                          >
+                            N/A
+                          </td>
+                        );
+                      }
                       return (
                         <td
                           key={j}
                           className={`px-3 py-2 text-center font-medium ${
                             t > limit
-                              ? "bg-orange-50 text-orange-600"
+                              ? "bg-red-50 text-red-600"
                               : "text-gray-800"
                           }`}
                         >
-                          {t > limit ? `🔥 ${t}` : t}
+                          {t > limit ? `🚨 ${t}` : t}
                         </td>
                       );
                     })}
