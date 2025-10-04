@@ -9,6 +9,12 @@ const account = process.env.AZURE_STORAGE_ACCOUNT_NAME!;
 const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY!;
 const containerName = "grease-pictures";
 
+if (!account || !accountKey) {
+  throw new Error(
+    "❌ Missing AZURE_STORAGE_ACCOUNT_NAME or AZURE_STORAGE_ACCOUNT_KEY"
+  );
+}
+
 const sharedKeyCredential = new StorageSharedKeyCredential(account, accountKey);
 
 export async function POST(req: Request) {
