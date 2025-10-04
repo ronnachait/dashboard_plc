@@ -677,6 +677,7 @@ export default function GreasePage() {
                         fileType: file.type,
                       }),
                     });
+
                     const { uploadUrl, publicUrl } = await res.json();
 
                     // ✅ PUT ขึ้น Azure Blob

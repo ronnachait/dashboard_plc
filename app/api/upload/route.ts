@@ -12,30 +12,49 @@ const containerName = "grease-pictures";
 const sharedKeyCredential = new StorageSharedKeyCredential(account, accountKey);
 
 export async function POST(req: Request) {
-  const { fileName, fileType } = await req.json();
+  try {
+    const body = await req.json().catch(() => null);
 
-  // ✅ ตั้งชื่อไฟล์ไม่ซ้ำ
-  const blobName = `${Date.now()}-${fileName}`;
+    if (!body || !body.fileName || !body.fileType) {
+      return NextResponse.json(
+        { error: "❌ Missing fileName or fileType" },
+        { status: 400 }
+      );
+    }
 
-  // ✅ ใช้ BlobSASPermissions ไม่ใช่ ContainerSASPermissions
-  const permissions = BlobSASPermissions.parse("cw"); // create + write
+    const { fileName, fileType } = body;
 
-  const sasOptions = {
-    containerName,
-    blobName,
-    permissions,
-    contentType: fileType, // optional: ช่วย enforce mime-type
-    startsOn: new Date(),
-    expiresOn: new Date(new Date().valueOf() + 3600 * 1000), // หมดอายุใน 1 ชม.
-  };
+    // ✅ ตั้งชื่อไฟล์ไม่ซ้ำ
+    const blobName = `${Date.now()}-${fileName}`;
 
-  const sasToken = generateBlobSASQueryParameters(
-    sasOptions,
-    sharedKeyCredential
-  ).toString();
+    // ✅ ใช้ BlobSASPermissions ไม่ใช่ ContainerSASPermissions
+    const permissions = BlobSASPermissions.parse("cw"); // create + write
 
-  const uploadUrl = `https://${account}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
-  const publicUrl = `https://${account}.blob.core.windows.net/${containerName}/${blobName}`;
+    const sasOptions = {
+      containerName,
+      blobName,
+      permissions,
+      contentType: fileType,
+      startsOn: new Date(),
+      expiresOn: new Date(new Date().valueOf() + 3600 * 1000), // 1 ชม.
+    };
 
-  return NextResponse.json({ uploadUrl, publicUrl });
+    const sasToken = generateBlobSASQueryParameters(
+      sasOptions,
+      sharedKeyCredential
+    ).toString();
+
+    const uploadUrl = `https://${account}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
+    const publicUrl = `https://${account}.blob.core.windows.net/${containerName}/${blobName}`;
+
+    return NextResponse.json({ uploadUrl, publicUrl });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.error("❌ Upload route error:", err);
+      return NextResponse.json(
+        { error: err.message || "Internal server error" },
+        { status: 500 }
+      );
+    }
+  }
 }
