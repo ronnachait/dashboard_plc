@@ -19,7 +19,10 @@ export async function GET() {
 
   all.forEach((log) => {
     const baseDate = log.shiftDate ?? log.date; // ถ้า shiftDate ว่าง ใช้ date แทน
-    const d = new Date(baseDate).toISOString().split("T")[0];
+    const d = new Date(baseDate).toLocaleDateString("sv-SE", {
+      timeZone: "Asia/Bangkok",
+    }); // 👉 "2025-10-06"
+
     const key = `${d}-${log.shift ?? "UNKNOWN"}`;
 
     if (!daily[key]) {

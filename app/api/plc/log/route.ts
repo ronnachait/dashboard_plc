@@ -4,14 +4,19 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
+    console.log("📩 Payload received:", body);
     // ✅ Extract data จาก payload ใหม่
-    const cylinderTemps = body.cylinder?.temperature ?? [];
-    const chopperTemps = body.chopper?.temperature ?? [];
-    const pressures = body.chopper?.pressure ?? [];
+    const pressures = Array.isArray(body.pressure)
+      ? body.pressure
+      : body.chopper?.pressure ?? [];
 
     // ✅ รวมอุณหภูมิทั้งหมด (Cylinder + Chopper)
-    const temperatures = [...cylinderTemps, ...chopperTemps];
+    const temperatures = Array.isArray(body.temperature)
+      ? body.temperature
+      : [
+          ...(body.cylinder?.temperature ?? []),
+          ...(body.chopper?.temperature ?? []),
+        ];
 
     if (!Array.isArray(pressures) || !Array.isArray(temperatures)) {
       return NextResponse.json(
@@ -30,6 +35,11 @@ export async function POST(req: Request) {
           : body.reason ?? null,
       },
     });
+    console.log(
+      `✅ Saved log: P=${pressures.length} T=${temperatures.length} action=${
+        body.action ?? "OK"
+      }`
+    );
 
     return NextResponse.json({ success: true, log });
   } catch (err: unknown) {

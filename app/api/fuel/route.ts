@@ -5,7 +5,7 @@ function getShiftAndShiftDate(date: Date): {
   shiftDate: Date;
 } {
   const h = date.getHours();
-
+  console.log(new Date(date.toDateString()));
   if (h >= 8 && h < 19) {
     // 🌞 กะเช้า (08:00 - 18:59)
     return { shift: "MORNING", shiftDate: new Date(date.toDateString()) };

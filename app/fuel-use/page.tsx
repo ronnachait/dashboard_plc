@@ -42,19 +42,16 @@ type Vehicle = {
 
 type FuelLog = {
   id: string;
-  date: string; // เวลา log จริง
-  shiftDate: string; // YYYY-MM-DD วันกะที่คำนวณแล้ว
+  date: string;
+  shiftDate: string;
   shift?: "MORNING" | "NIGHT" | null;
   fuelIn: number;
   fuelUsed: number;
   balance: number;
   note?: string;
-  vehicle: {
-    id: string;
-    name: string;
-    plateNo?: string | null;
-  };
+  vehicle: Vehicle;
 };
+
 type DailySummary = {
   shiftDate: string;
   shift: Shift | null;
@@ -78,6 +75,9 @@ export default function FuelPage() {
     totalUsed: 0,
   });
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   // โหลดรถ
   useEffect(() => {
     fetch("/api/vehicle").then(async (res) => {
@@ -90,30 +90,33 @@ export default function FuelPage() {
 
   // โหลดประวัติ + daily
   const fetchHistory = async () => {
-    const res = await fetch("/api/fuel/history");
-    if (res.ok) {
-      const data = await res.json();
-      setLogs(data.logs);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/fuel/history");
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.logs);
 
-      // summary รวม
-      let totalIn = 0,
-        totalUsed = 0;
-      data.logs.forEach((log: FuelLog) => {
-        totalIn += log.fuelIn;
-        totalUsed += log.fuelUsed;
-      });
-      setSummary({
-        balance: totalIn - totalUsed,
-        totalIn,
-        totalUsed,
-      });
-    }
+        let totalIn = 0,
+          totalUsed = 0;
+        data.logs.forEach((log: FuelLog) => {
+          totalIn += log.fuelIn;
+          totalUsed += log.fuelUsed;
+        });
+        setSummary({
+          balance: totalIn - totalUsed,
+          totalIn,
+          totalUsed,
+        });
+      }
 
-    // daily summary
-    const dailyRes = await fetch("/api/fuel/daily");
-    if (dailyRes.ok) {
-      const data = await dailyRes.json();
-      setDaily(data.summary);
+      const dailyRes = await fetch("/api/fuel/daily");
+      if (dailyRes.ok) {
+        const data = await dailyRes.json();
+        setDaily(data.summary);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,25 +130,47 @@ export default function FuelPage() {
       return;
     }
 
-    const res = await fetch("/api/fuel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vehicleId: selectedVehicle,
-        type,
-        amount,
-        note,
-        shift: type === "IN" ? shift : null, // เติมต้องเลือกกะ
-      }),
-    });
+    setSaving(true);
+    try {
+      const res = await fetch("/api/fuel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicleId: selectedVehicle,
+          type,
+          amount,
+          note,
+          shift: type === "IN" ? shift : null,
+        }),
+      });
 
-    if (res.ok) {
-      alert("✅ บันทึกสำเร็จ");
-      setAmount(0);
-      setNote("");
-      fetchHistory();
+      if (res.ok) {
+        alert("✅ บันทึกสำเร็จ");
+        setAmount(0);
+        setNote("");
+        await fetchHistory();
+      } else {
+        alert("❌ บันทึกล้มเหลว");
+      }
+    } finally {
+      setSaving(false);
     }
   };
+
+  // 🔹 Loading Skeleton
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto animate-pulse">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-28 bg-gray-200 rounded-xl shadow-inner" />
+          ))}
+        </div>
+        <div className="h-[500px] bg-gray-200 rounded-xl shadow-inner" />
+        <div className="h-[300px] bg-gray-200 rounded-xl shadow-inner" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -262,9 +287,10 @@ export default function FuelPage() {
 
                 <Button
                   onClick={() => handleSave("IN")}
+                  disabled={saving}
                   className="w-full bg-green-600 hover:bg-green-700"
                 >
-                  ✅ บันทึกการเติม
+                  {saving ? "⏳ กำลังบันทึก..." : "✅ บันทึกการเติม"}
                 </Button>
               </div>
             </TabsContent>
@@ -300,9 +326,10 @@ export default function FuelPage() {
 
                 <Button
                   onClick={() => handleSave("USED")}
+                  disabled={saving}
                   className="w-full bg-red-600 hover:bg-red-700"
                 >
-                  📉 บันทึกการใช้
+                  {saving ? "⏳ กำลังบันทึก..." : "📉 บันทึกการใช้"}
                 </Button>
               </div>
             </TabsContent>
@@ -335,7 +362,9 @@ export default function FuelPage() {
                   className="hover:bg-gray-50"
                 >
                   <TableCell>
-                    {new Date(d.shiftDate).toLocaleDateString("th-TH")}
+                    {new Date(d.shiftDate).toLocaleDateString("th-TH", {
+                      timeZone: "Asia/Bangkok",
+                    })}
                   </TableCell>
 
                   <TableCell>
@@ -377,14 +406,18 @@ export default function FuelPage() {
               <XAxis
                 dataKey="shiftDate"
                 tickFormatter={(val) =>
-                  new Date(val).toLocaleDateString("th-TH")
+                  new Date(val).toLocaleDateString("th-TH", {
+                    timeZone: "Asia/Bangkok",
+                  })
                 }
               />
               <YAxis />
               <Tooltip
                 formatter={(value: number) => `${value.toFixed(2)} ลิตร`}
                 labelFormatter={(label) =>
-                  new Date(label).toLocaleDateString("th-TH")
+                  new Date(label).toLocaleDateString("th-TH", {
+                    timeZone: "Asia/Bangkok",
+                  })
                 }
               />
               <Line
@@ -399,6 +432,7 @@ export default function FuelPage() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
       <FuelHistoryPage />
     </div>
   );
