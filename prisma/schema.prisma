@@ -61,18 +61,17 @@ enum Shift {
 }
 
 model Vehicle {
-  id                 String   @id @default(uuid())
+  id                 String            @id @default(uuid())
   name               String
   plateNo            String?
   lastHourBeforeTest Float?
   lastHourAfterTest  Float?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt @default(now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @default(now()) @updatedAt
   fuelLogs           FuelLog[]
   greasePoints       GreasePoint[]
+  maintenancePlans   MaintenancePlan[] // ✅ เพิ่มบรรทัดนี้
 }
-
-
 
 model FuelLog {
   id        String    @id @default(uuid())
@@ -87,17 +86,69 @@ model FuelLog {
 }
 
 model GreasePoint {
-  id             String   @id @default(uuid())
-  pointNo        Int      // จุดที่ (1..32)
-  name           String   // ชื่อหลัก
-  fittings       Int      // จำนวนหัวอัด (QTY)
-  positions      String?  // ตำแหน่งย่อย เช่น LH, RH
-  detail         String?  // รายละเอียดเพิ่มเติม
-  intervalHours  Int      // รอบการอัด (ชม.)
-  lastGreaseHour Float    // ชั่วโมงล่าสุดที่อัด
-  nextDueHour    Float    // ชั่วโมงที่ครบกำหนดถัดไป
-  picture        String?  // path รูปประกอบ
+  id             String  @id @default(uuid())
+  pointNo        Int // จุดที่ (1..32)
+  name           String // ชื่อหลัก
+  fittings       Int // จำนวนหัวอัด (QTY)
+  positions      String? // ตำแหน่งย่อย เช่น LH, RH
+  detail         String? // รายละเอียดเพิ่มเติม
+  intervalHours  Int // รอบการอัด (ชม.)
+  lastGreaseHour Float // ชั่วโมงล่าสุดที่อัด
+  nextDueHour    Float // ชั่วโมงที่ครบกำหนดถัดไป
+  picture        String? // path รูปประกอบ
   vehicleId      String
-  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicle        Vehicle @relation(fields: [vehicleId], references: [id])
+}
+
+model MaintenanceTemplate {
+  id         String            @id @default(uuid())
+  category   String // เช่น "Engine", "Fuel", "Hydraulic"
+  item       String // เช่น "Fuel Filter", "Air Filter"
+  action     String // เช่น "Change", "Clean", "Check"
+  intervalHr Int? // รอบ (ชม.)
+  note       String?
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  plans      MaintenancePlan[]
+}
+
+model MaintenancePlan {
+  id           String              @id @default(uuid())
+  vehicleId    String
+  vehicle      Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  templateId   String
+  template     MaintenanceTemplate @relation(fields: [templateId], references: [id])
+  nextDueHour  Float
+  lastDoneHour Float?
+  status       PlanStatus          @default(PENDING)
+  updatedAt    DateTime            @updatedAt
+  logs         MaintenanceLog[]
+
+  @@unique([vehicleId, templateId]) // ใช้แค่นี้พอ
+}
+
+model MaintenanceLog {
+  id         String          @id @default(uuid())
+  planId     String
+  plan       MaintenancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  doneAtHour Float
+  doneAt     DateTime        @default(now())
+  doneBy     String?
+  remarks    String?
+  photoUrl   String?
+  status     LogStatus       @default(DONE)
+  createdAt  DateTime        @default(now())
+}
+
+enum PlanStatus {
+  PENDING
+  DONE
+  OVERDUE
+}
+
+enum LogStatus {
+  DONE
+  SKIPPED
 }
 

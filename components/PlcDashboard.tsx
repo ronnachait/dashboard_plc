@@ -12,12 +12,12 @@ import {
   Legend,
 } from "chart.js";
 import zoomPlugin from "chartjs-plugin-zoom";
-import { Wifi, Activity, Loader2, AlertTriangle } from "lucide-react";
-import SettingsSync from "./SettingsSync";
+import { Wifi, Activity, AlertTriangle } from "lucide-react";
 import AlarmCard from "./AlarmCard";
 import SensorGauge from "./SensorGauge";
 import SensorChart from "./SensorChart";
 import { toast } from "sonner";
+import PlcControls from "@/components/PlcControls";
 
 ChartJS.register(
   CategoryScale,
@@ -71,6 +71,39 @@ export default function PlcDashboard() {
   const [loading, setLoading] = useState<"SET" | "RST" | null>(null);
   const [plcNoResponse, setPlcNoResponse] = useState(false);
   const [greaseAlerts, setGreaseAlerts] = useState<GreasePointAlert[]>([]);
+  const [maintenanceAlerts, setMaintenanceAlerts] = useState<
+    {
+      id: string;
+      item: string;
+      nextDueHour: number;
+      vehicleName: string;
+      plateNo: string;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    const fetchMaintenanceAlerts = async () => {
+      try {
+        const res = await fetch("/api/maintenance/alerts");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // ✅ filter เฉพาะที่เกินรอบ
+        const alerts = data.alerts ?? [];
+        setMaintenanceAlerts(alerts);
+
+        if (alerts.length > 0) {
+          toast.warning(`⚠️ มี ${alerts.length} รายการบำรุงถึงรอบแล้ว`);
+        }
+      } catch (err) {
+        console.error("⚠️ Maintenance fetch failed:", err);
+      }
+    };
+
+    fetchMaintenanceAlerts();
+    const interval = setInterval(fetchMaintenanceAlerts, 60000); // 🔄 ทุก 1 นาที
+    return () => clearInterval(interval);
+  }, []);
 
   const [alarm, setAlarm] = useState<{ active: boolean; reason: string }>({
     active: false,
@@ -288,21 +321,48 @@ export default function PlcDashboard() {
         </div>
       )}
       {greaseAlerts.length > 0 && (
-        <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 shadow">
-          <h2 className="font-bold flex items-center gap-2">🛢️ Alarm จารบี</h2>
-          <ul className="list-disc ml-6 mt-2">
+        <div className="p-2.5 rounded-md border border-red-400 bg-red-50 text-red-700 shadow-sm text-xs">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold flex items-center gap-1 text-[13px]">
+              🛢️ จารบีครบ {greaseAlerts.length} จุด
+            </h2>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
             {greaseAlerts.map((g) => (
-              <li key={g.id}>
-                จุด {g.pointNo}: {g.name} — ถึงรอบที่ {g.nextDueHour} ชม.
-              </li>
+              <span
+                key={g.id}
+                className="px-2 py-0.5 bg-red-100 border border-red-200 rounded-md text-[11px] font-medium text-red-800 whitespace-nowrap"
+              >
+                จุด {g.pointNo}: {g.name}
+              </span>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {alarm.active && (
         <div className="p-3 rounded-lg border border-yellow-500 bg-yellow-50 text-yellow-800 shadow">
           ⚠️ Alarm ยังไม่ถูก Reset → {alarm.reason}
+        </div>
+      )}
+
+      {maintenanceAlerts.length > 0 && (
+        <div className="p-2.5 rounded-md border border-yellow-400 bg-yellow-50 text-yellow-800 shadow-sm text-xs">
+          <div className="flex items-center justify-between">
+            <h2 className="font-medium flex items-center gap-1 text-[13px]">
+              ⚙️ รอบบำรุงครบ {maintenanceAlerts.length} รายการ
+            </h2>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+            {maintenanceAlerts.map((m) => (
+              <span
+                key={m.id}
+                className="px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded-md text-[11px] font-medium text-yellow-800 whitespace-nowrap"
+              >
+                {m.vehicleName} ({m.plateNo}) : {m.item}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -347,74 +407,14 @@ export default function PlcDashboard() {
           active={alarm.active}
           reasons={alarm.reason ? alarm.reason.split(", ") : []}
         />
-
-        {/* Controls */}
-        <div className="p-3 rounded-lg shadow border bg-white flex flex-col gap-2">
-          <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
-            Controls
-          </h3>
-
-          <div className="grid grid-cols-3 gap-2">
-            {/* START */}
-            <button
-              onClick={() => handleClick("SET")}
-              disabled={
-                buttonsDisabled ||
-                alarm.active ||
-                plcStatus === true ||
-                loading !== null
-              }
-              className="px-2 py-2 rounded-md text-xs font-bold 
-               bg-green-600 hover:bg-green-700 text-white 
-               shadow-sm hover:shadow transition disabled:bg-gray-300"
-            >
-              {loading === "SET" ? (
-                <Loader2 className="animate-spin h-4 w-4 mx-auto" />
-              ) : (
-                <>
-                  <span className="md:hidden">▶</span> {/* Mobile: แค่ icon */}
-                  <span className="hidden md:inline">▶ START</span>{" "}
-                  {/* Desktop: text */}
-                </>
-              )}
-            </button>
-
-            {/* STOP */}
-            <button
-              onClick={() => handleClick("RST")}
-              disabled={buttonsDisabled || loading !== null}
-              className="px-2 py-2 rounded-md text-xs font-bold 
-               bg-red-600 hover:bg-red-700 text-white 
-               shadow-sm hover:shadow transition disabled:bg-gray-300"
-            >
-              {loading === "RST" ? (
-                <Loader2 className="animate-spin h-4 w-4 mx-auto" />
-              ) : (
-                <>
-                  <span className="md:hidden">■</span>
-                  <span className="hidden md:inline">■ STOP</span>
-                </>
-              )}
-            </button>
-
-            {/* RESET */}
-            <button
-              onClick={() => handleClick("RESET")}
-              disabled={!alarm.active || buttonsDisabled}
-              className="px-2 py-2 rounded-md text-xs font-bold 
-               bg-yellow-500 hover:bg-yellow-600 text-white 
-               shadow-sm hover:shadow transition disabled:bg-gray-300"
-            >
-              <span className="md:hidden">🔄</span>
-              <span className="hidden md:inline">🔄 RESET</span>
-            </button>
-          </div>
-
-          <SettingsSync
-            onSettingsChange={(newSettings) => setSettings(newSettings)}
-            buttonsDisabled={buttonsDisabled}
-          />
-        </div>
+        <PlcControls
+          handleClick={handleClick}
+          alarm={alarm}
+          plcStatus={plcStatus ?? false}
+          loading={loading}
+          buttonsDisabled={buttonsDisabled}
+          setSettings={setSettings}
+        />
       </div>
       {/* Sensor Zones */}
       <div className="space-y-8">
