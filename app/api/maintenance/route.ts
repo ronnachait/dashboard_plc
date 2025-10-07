@@ -31,9 +31,18 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { vehicleId, category, item, action, intervalHr } = body;
+    const {
+      vehicleId,
+      category,
+      item,
+      action,
+      intervalHr,
+      lastDoneHour,
+      nextDueHour,
+      createdBy,
+    } = body;
 
-    // สร้าง template ใหม่ (หรือจะผูกกับ template เดิมก็ได้)
+    // ✅ สร้าง template ใหม่
     const template = await prisma.maintenanceTemplate.create({
       data: {
         category,
@@ -44,14 +53,15 @@ export async function POST(req: Request) {
       },
     });
 
-    // สร้าง plan ใหม่
+    // ✅ สร้างแผนใหม่ โดยใช้ค่าที่กรอกจากฟอร์ม
     const plan = await prisma.maintenancePlan.create({
       data: {
         vehicleId,
         templateId: template.id,
-        nextDueHour: 0,
-        lastDoneHour: 0,
+        lastDoneHour: Number(lastDoneHour ?? 0),
+        nextDueHour: Number(nextDueHour ?? 0),
         status: "PENDING",
+        createdBy: createdBy ?? "System",
       },
       include: { template: true },
     });
@@ -60,7 +70,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("❌ POST /maintenance error:", err);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "Internal Server Error", details: String(err) },
       { status: 500 }
     );
   }

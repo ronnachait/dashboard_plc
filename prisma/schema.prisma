@@ -123,6 +123,7 @@ model MaintenancePlan {
   lastDoneHour Float?
   status       PlanStatus          @default(PENDING)
   updatedAt    DateTime            @updatedAt
+  createdBy    String?
   logs         MaintenanceLog[]
 
   @@unique([vehicleId, templateId]) // ใช้แค่นี้พอ
@@ -150,5 +151,16 @@ enum PlanStatus {
 enum LogStatus {
   DONE
   SKIPPED
+}
+
+
+model SensorSummaryBatch {
+  id        String   @id @default(cuid())
+  date      DateTime
+  shift     String?
+  hourMeter Float?
+  sensors   Json     // 👉 เก็บ sensor summary ทั้งหมดใน JSON
+  createdAt DateTime @default(now())
+  @@unique([date, shift]) // ✅ กันซ้ำระดับ DB
 }
 

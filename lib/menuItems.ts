@@ -8,15 +8,46 @@ import {
   LogOut,
   Bubbles,
   Construction,
+  Thermometer,
+  FolderKanban,
+  Settings,
 } from "lucide-react";
 
 export const menuItems = [
-  { label: "Dashboard", Icon: Gauge, path: "/plc" },
-  { label: "Fuel Use", Icon: Fuel, path: "/fuel-use" },
-  { label: "Maintenance", Icon: Construction, path: "/maintenance" },
-  { label: "Grease", Icon: Bubbles, path: "/grease" },
-  { label: "Raspberry Pi5", Icon: Router, path: "/pi-moniter" },
-  { label: "History", Icon: History, path: "/history" },
-  { label: "Backup", Icon: DatabaseBackup, path: "/backup" },
-  { label: "Logout", Icon: LogOut, path: "/logout", isLogout: true }, // ✅ เผื่อ Logout
+  {
+    label: "Dashboard",
+    Icon: Gauge,
+    path: "/plc",
+  },
+
+  // 📊 Report Dropdown
+  {
+    label: "Report",
+    Icon: FolderKanban,
+    children: [
+      { label: "Fuel Use", Icon: Fuel, path: "/fuel-use" },
+      { label: "Temp / Pressure", Icon: Thermometer, path: "/temp-pressure" },
+      { label: "Maintenance", Icon: Construction, path: "/maintenance" },
+      { label: "Grease", Icon: Bubbles, path: "/grease" },
+    ],
+  },
+
+  // ⚙️ System Dropdown
+  {
+    label: "System",
+    Icon: Settings,
+    children: [
+      { label: "Raspberry Pi5", Icon: Router, path: "/pi-moniter" },
+      { label: "History", Icon: History, path: "/history" },
+      { label: "Backup", Icon: DatabaseBackup, path: "/backup" },
+    ],
+  },
+
+  // 🚪 Logout
+  {
+    label: "Logout",
+    Icon: LogOut,
+    path: "/logout",
+    isLogout: true,
+  },
 ];

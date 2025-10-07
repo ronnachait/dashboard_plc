@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   Clock,
   Gauge,
-  History,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MaintenanceLogModal } from "./MaintenanceLogs";
@@ -35,6 +35,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 type Vehicle = {
   id: string;
@@ -64,13 +70,28 @@ export default function MaintenanceTimeline() {
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const { data: session } = useSession();
+
   const [openAdd, setOpenAdd] = useState(false);
   const [newPlan, setNewPlan] = useState({
     category: "",
     item: "",
     action: "",
     intervalHr: "",
+    lastDoneHour: "",
   });
+  const [editPlan, setEditPlan] = useState<Plan | null>(null);
+  const [editForm, setEditForm] = useState({
+    category: "",
+    item: "",
+    action: "",
+    intervalHr: "",
+  });
+
+  // ✅ Filter & Search states
+  const [filterStatus, setFilterStatus] = useState<
+    "ALL" | "PENDING" | "OVERDUE" | "DONE"
+  >("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 📦 Fetch maintenance plans
   useEffect(() => {
@@ -99,6 +120,17 @@ export default function MaintenanceTimeline() {
     fetchVehicle();
   }, []);
 
+  useEffect(() => {
+    if (editPlan) {
+      setEditForm({
+        category: editPlan.template.category,
+        item: editPlan.template.item,
+        action: editPlan.template.action,
+        intervalHr: String(editPlan.template.intervalHr ?? ""),
+      });
+    }
+  }, [editPlan]);
+
   const handleConfirmAndSave = async (planId: string) => {
     if (!vehicle) return;
 
@@ -115,7 +147,6 @@ export default function MaintenanceTimeline() {
       const result = await res.json();
       if (res.ok) {
         toast.success("✅ บันทึกการบำรุงเรียบร้อย");
-
         setPlans((prev) =>
           prev.map((p) =>
             p.id === planId
@@ -141,6 +172,26 @@ export default function MaintenanceTimeline() {
 
   const canEdit =
     session?.user?.role === "admin" || session?.user?.role === "operator";
+
+  // 🧮 Filter + Search logic
+  const filteredPlans = plans.filter((p) => {
+    const isOverdue =
+      vehicle?.lastHourAfterTest && vehicle.lastHourAfterTest >= p.nextDueHour;
+
+    const matchesStatus =
+      filterStatus === "ALL"
+        ? true
+        : filterStatus === "OVERDUE"
+        ? isOverdue
+        : p.status === filterStatus;
+
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      p.template.category.toLowerCase().includes(q) ||
+      p.template.item.toLowerCase().includes(q);
+
+    return matchesStatus && matchesSearch;
+  });
 
   if (loading)
     return (
@@ -192,18 +243,27 @@ export default function MaintenanceTimeline() {
           </h3>
 
           {canEdit && (
-            <Dialog open={openAdd} onOpenChange={setOpenAdd}>
+            <Dialog
+              open={openAdd}
+              onOpenChange={(isOpen) => {
+                setOpenAdd(isOpen);
+                if (isOpen && vehicle?.lastHourAfterTest) {
+                  setNewPlan((prev) => ({
+                    ...prev,
+                    lastDoneHour: vehicle?.lastHourAfterTest?.toString() ?? "",
+                  }));
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1.5">
                   ➕ เพิ่มรายการ
                 </Button>
               </DialogTrigger>
-
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>เพิ่มรายการบำรุงรักษา</DialogTitle>
                 </DialogHeader>
-
                 <div className="space-y-4 py-2">
                   <div>
                     <Label htmlFor="category">หมวดหมู่</Label>
@@ -216,7 +276,6 @@ export default function MaintenanceTimeline() {
                       }
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="item">รายการ</Label>
                     <Input
@@ -228,7 +287,6 @@ export default function MaintenanceTimeline() {
                       }
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="action">งานที่ต้องทำ</Label>
                     <Input
@@ -240,7 +298,6 @@ export default function MaintenanceTimeline() {
                       }
                     />
                   </div>
-
                   <div>
                     <Label htmlFor="intervalHr">รอบบำรุง (ชม.)</Label>
                     <Input
@@ -253,8 +310,21 @@ export default function MaintenanceTimeline() {
                       }
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="lastDoneHour">ชั่วโมงที่ทำล่าสุด</Label>
+                    <Input
+                      id="lastDoneHour"
+                      type="number"
+                      value={newPlan.lastDoneHour}
+                      onChange={(e) =>
+                        setNewPlan({ ...newPlan, lastDoneHour: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      ค่าเริ่มต้น: {vehicle?.lastHourAfterTest ?? 0} ชม.
+                    </p>
+                  </div>
                 </div>
-
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setOpenAdd(false)}>
                     ยกเลิก
@@ -269,13 +339,17 @@ export default function MaintenanceTimeline() {
                             ...newPlan,
                             vehicleId: vehicle?.id,
                             createdBy: session?.user?.name ?? "Unknown",
+                            lastDoneHour: parseFloat(
+                              newPlan.lastDoneHour || "0"
+                            ),
+                            nextDueHour:
+                              parseFloat(newPlan.lastDoneHour || "0") +
+                              parseFloat(newPlan.intervalHr || "0"),
                           }),
                         });
-
                         if (!res.ok) throw new Error("Failed to add");
                         const data = await res.json();
                         toast.success("✅ เพิ่มรายการสำเร็จ");
-
                         setPlans((prev) => [...prev, data.plan]);
                         setOpenAdd(false);
                         setNewPlan({
@@ -283,6 +357,7 @@ export default function MaintenanceTimeline() {
                           item: "",
                           action: "",
                           intervalHr: "",
+                          lastDoneHour: "",
                         });
                       } catch (err) {
                         console.error(err);
@@ -299,11 +374,50 @@ export default function MaintenanceTimeline() {
           )}
         </div>
 
-        {plans.length === 0 ? (
-          <p className="text-gray-500 text-center">ไม่มีข้อมูลบำรุงรักษา</p>
+        {/* 🔍 Filter + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex gap-2 flex-wrap">
+            {["ALL", "PENDING", "OVERDUE", "DONE"].map((status) => (
+              <Button
+                key={status}
+                variant={filterStatus === status ? "default" : "outline"}
+                size="sm"
+                onClick={() =>
+                  setFilterStatus(
+                    status as "ALL" | "PENDING" | "OVERDUE" | "DONE"
+                  )
+                }
+              >
+                {status === "ALL"
+                  ? "ทั้งหมด"
+                  : status === "PENDING"
+                  ? "⏳ รอดำเนินการ"
+                  : status === "OVERDUE"
+                  ? "⚠️ เกินรอบ"
+                  : "✅ ทำแล้ว"}
+              </Button>
+            ))}
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Input
+              type="text"
+              placeholder=" ค้นหาชื่อหรือหมวดหมู่..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 text-sm"
+            />
+            <span className="absolute left-2 top-2.5 text-gray-400">🔍</span>
+          </div>
+        </div>
+
+        {/* 🔧 Filtered list */}
+        {filteredPlans.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">
+            ไม่พบข้อมูลที่ตรงกับเงื่อนไข
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {plans.map((p) => {
+            {filteredPlans.map((p) => {
               const isOverdue =
                 vehicle.lastHourAfterTest &&
                 vehicle.lastHourAfterTest >= p.nextDueHour;
@@ -377,7 +491,7 @@ export default function MaintenanceTimeline() {
                     </Badge>
                   </div>
 
-                  {/* Progress */}
+                  {/* Progress bar */}
                   <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative shadow-inner">
                     <div
                       className={`absolute left-0 top-0 h-full transition-all duration-700 ${
@@ -388,44 +502,28 @@ export default function MaintenanceTimeline() {
                           : "bg-gradient-to-r from-blue-400 to-blue-600"
                       }`}
                       style={{ width: `${progressPercent}%` }}
-                    ></div>
+                    />
                     <span className="absolute inset-0 flex justify-center items-center text-[11px] font-bold text-gray-700 drop-shadow">
                       {progressPercent.toFixed(0)}%
                     </span>
                   </div>
 
-                  {/* Hours */}
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>ล่าสุด: {p.lastDoneHour ?? "-"} ชม.</span>
                     <span>รอบถัดไป: {p.nextDueHour} ชม.</span>
                   </div>
 
-                  {/* Buttons */}
-                  <div className="flex justify-between">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setOpenLog(p.id)}
-                      className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                    >
-                      <History className="w-4 h-4" /> ดูประวัติ
-                    </Button>
-
+                  {/* ✅ Buttons */}
+                  <div className="flex justify-between items-center mt-2">
                     {canEdit && p.status !== "DONE" && (
                       <AlertDialog open={confirmId === p.id}>
                         <AlertDialogTrigger asChild>
                           <Button
                             size="sm"
                             onClick={() => setConfirmId(p.id)}
-                            className="group relative overflow-hidden rounded-md bg-gradient-to-r from-emerald-500 to-green-600 
-             px-4 py-1.5 text-sm font-medium text-white shadow-md transition-all duration-300 
-             hover:from-emerald-600 hover:to-green-700 active:scale-[0.97] cursor-pointer"
+                            className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white text-xs font-medium shadow-sm"
                           >
-                            <span className="relative z-10 flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-white/90 group-hover:rotate-12 transition-transform duration-200" />
-                              บันทึกการบำรุง
-                            </span>
-                            <span className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                            ✅ บันทึกการบำรุง
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -450,9 +548,55 @@ export default function MaintenanceTimeline() {
                         </AlertDialogContent>
                       </AlertDialog>
                     )}
+
+                    {/* ⚙️ Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 border-gray-300 hover:bg-gray-100"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-36 text-sm">
+                        <DropdownMenuItem onClick={() => setOpenLog(p.id)}>
+                          📜 ดูประวัติ
+                        </DropdownMenuItem>
+                        {canEdit && (
+                          <>
+                            <DropdownMenuItem onClick={() => setEditPlan(p)}>
+                              ✏️ แก้ไข
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600 focus:bg-red-50"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(
+                                    `/api/maintenance/${p.id}`,
+                                    { method: "DELETE" }
+                                  );
+                                  if (!res.ok) throw new Error("Delete failed");
+                                  setPlans((prev) =>
+                                    prev.filter((x) => x.id !== p.id)
+                                  );
+                                  toast.success("🗑️ ลบสำเร็จ");
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error("❌ ลบไม่สำเร็จ");
+                                }
+                              }}
+                            >
+                              🗑️ ลบ
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
-                  {/* ✅ Modal Log History */}
+                  {/* 🧾 Modal Log */}
                   {openLog === p.id && (
                     <MaintenanceLogModal
                       planId={p.id}
@@ -466,6 +610,117 @@ export default function MaintenanceTimeline() {
           </div>
         )}
       </div>
+
+      {/* ✏️ Modal แก้ไขรายการ */}
+      {editPlan && (
+        <Dialog open={!!editPlan} onOpenChange={() => setEditPlan(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>แก้ไขรายการบำรุง</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="editCategory">หมวดหมู่</Label>
+                <Input
+                  id="editCategory"
+                  placeholder="เช่น เครื่องยนต์"
+                  value={editForm.category}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, category: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="editItem">รายการ</Label>
+                <Input
+                  id="editItem"
+                  placeholder="เช่น เปลี่ยนน้ำมันเครื่อง"
+                  value={editForm.item}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, item: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="editAction">งานที่ต้องทำ</Label>
+                <Input
+                  id="editAction"
+                  placeholder="เช่น ตรวจเช็ค / เปลี่ยน"
+                  value={editForm.action}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, action: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="editIntervalHr">รอบบำรุง (ชม.)</Label>
+                <Input
+                  id="editIntervalHr"
+                  type="number"
+                  placeholder="เช่น 200"
+                  value={editForm.intervalHr}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, intervalHr: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditPlan(null)}>
+                ยกเลิก
+              </Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/maintenance/${editPlan.id}`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        category: editForm.category,
+                        item: editForm.item,
+                        action: editForm.action,
+                        intervalHr: parseFloat(editForm.intervalHr || "0"),
+                      }),
+                    });
+                    if (!res.ok) throw new Error("Update failed");
+
+                    const data = await res.json();
+
+                    // ✅ อัปเดต state ให้เห็นทันที
+                    setPlans((prev) =>
+                      prev.map((p) =>
+                        p.id === editPlan.id
+                          ? {
+                              ...p,
+                              template: {
+                                ...p.template,
+                                category: data.plan.template.category,
+                                item: data.plan.template.item,
+                                action: data.plan.template.action,
+                                intervalHr: data.plan.template.intervalHr,
+                              },
+                            }
+                          : p
+                      )
+                    );
+
+                    toast.success("💾 แก้ไขรายการสำเร็จ");
+                    setEditPlan(null);
+                  } catch (err) {
+                    console.error(err);
+                    toast.error("❌ แก้ไขไม่สำเร็จ");
+                  }
+                }}
+              >
+                💾 บันทึก
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
