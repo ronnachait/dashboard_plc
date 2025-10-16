@@ -112,7 +112,6 @@ export default function SensorHistoryTable() {
                     } hover:bg-blue-100/50`}
                   >
                     {/* Date */}
-                    {/* Date */}
                     <td
                       className={`sticky left-0 z-10 border-r border-gray-200 p-2 text-center font-semibold bg-gradient-to-r from-blue-100 to-white text-blue-900 ${
                         isNewDay

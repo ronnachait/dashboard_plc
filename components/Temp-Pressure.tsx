@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UploadCloud, Database, History } from "lucide-react";
 import SensorHistoryTable from "./SensorHistoryTable";
+import { Progress } from "@/components/ui/progress"; // ✅ ต้องมี Progress component จาก shadcn
 
 type SensorSummary = {
   sensor: string;
@@ -44,6 +45,7 @@ export default function SensorSummaryPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [records, setRecords] = useState<SensorRecord[]>([]);
   const [activeTab, setActiveTab] = useState("history");
+  const [progress, setProgress] = useState<number>(0);
 
   const [meta, setMeta] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -51,47 +53,115 @@ export default function SensorSummaryPage() {
     hourMeter: "",
   });
 
-  // 🧩 Upload + Parse CSV
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name);
 
-    const text = await file.text();
+    // 🧩 อ่านไฟล์เป็นข้อความ
+    let text = await file.text();
+
+    // 🧹 ล้าง BOM / อักขระแปลก / tab ท้าย
+    text = text
+      .replace(/\uFEFF/g, "") // remove BOM
+      .replace(/#BeginMark.*/g, "") // ตัดส่วนท้ายถ้ามี
+      .replace(/\t+/g, "") // ตัด tab ส่วนเกิน
+      .replace(/�/g, ""); // ล้างอักขระเพี้ยน
+
+    // 🔍 หา #EndHeader
     const lines = text.split(/\r?\n/);
-
-    const startIdx = lines.findIndex((l) => l.trim().startsWith("#EndHeader"));
-    const endIdx = lines.findIndex((l) => l.trim().startsWith("#BeginMark"));
-    if (startIdx === -1 || endIdx === -1) {
-      toast.error("❌ ไม่พบ #EndHeader หรือ #BeginMark");
+    const start = lines.findIndex((l) => l.includes("#EndHeader"));
+    if (start === -1) {
+      toast.error("❌ ไม่พบ #EndHeader");
       return;
     }
 
-    const section = lines.slice(startIdx, endIdx).join("\n");
-    const parsed = Papa.parse(section, { header: true, skipEmptyLines: true });
-    const rows = parsed.data as Record<string, string>[];
-    const headers = Object.keys(rows[0]);
-    const sensorList = headers.filter((h) => h.includes("Maximum"));
+    // ✅ ตัดเฉพาะคำ #EndHeader ออก แต่เก็บ header ไว้
+    lines[start] = lines[start].replace("#EndHeader", "").trim();
 
-    const summaryData = sensorList.map((sensor) => {
-      const vals = rows
-        .map((r) => parseFloat(r[sensor] ?? "NaN"))
-        .filter((v) => !isNaN(v));
-      if (vals.length === 0) return { sensor, min: "-", avg: "-", max: "-" };
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-      return { sensor, min, avg, max };
+    // ✅ รวมเนื้อหาหลังจาก header เป็นต้นไป
+    const trimmed = lines.slice(start).join("\n");
+
+    // ✅ แปลงเป็นไฟล์ใหม่ (ให้ PapaParse ใช้ได้)
+    const blob = new Blob([trimmed], { type: "text/csv" });
+    const processedFile = new File([blob], file.name, { type: "text/csv" });
+
+    // 🌈 Reset state
+    setFileName(file.name);
+    setSummary([]);
+    setProgress(0);
+
+    const stats: Record<
+      string,
+      { min: number; max: number; sum: number; count: number }
+    > = {};
+    const totalSize = blob.size;
+    let processedSize = 0;
+
+    Papa.parse(processedFile, {
+      header: true,
+      worker: true,
+      skipEmptyLines: true,
+      delimiter: ",", // ✅ ใช้ comma เป็นหลัก
+      chunkSize: 1024 * 1024,
+      step: (results, parser) => {
+        const row = results.data as Record<string, string>;
+
+        if (!Object.keys(stats).length) {
+          console.log("✅ Headers from CSV:", Object.keys(row));
+        }
+
+        // หยุดเมื่อเจอ tag สิ้นสุด
+        const firstCell = Object.values(row)[0]?.toString().trim() ?? "";
+        if (firstCell.startsWith("#BeginMark")) {
+          parser.abort();
+          return;
+        }
+
+        Object.entries(row).forEach(([key, value]) => {
+          const cleanKey = key.trim();
+          // ✅ กรองเฉพาะ sensor ชื่อแบบ Kubota เช่น (1)CAN-CH01
+          if (!/\(?\d+\)?[A-Z-]*CH\d+/i.test(cleanKey)) return;
+          const v = parseFloat(value as string);
+          if (isNaN(v)) return;
+
+          if (!stats[cleanKey])
+            stats[cleanKey] = { min: v, max: v, sum: v, count: 1 };
+          else {
+            const s = stats[cleanKey];
+            s.min = Math.min(s.min, v);
+            s.max = Math.max(s.max, v);
+            s.sum += v;
+            s.count++;
+          }
+        });
+
+        processedSize += results.meta.cursor;
+        const percent = Math.min(
+          Math.round((processedSize / totalSize) * 100),
+          100
+        );
+        setProgress(percent);
+      },
+      complete: () => {
+        const summaryData = Object.entries(stats).map(([sensor, s]) => ({
+          sensor,
+          min: s.min,
+          avg: parseFloat((s.sum / s.count).toFixed(2)),
+          max: s.max,
+        }));
+        setSummary(summaryData);
+        setProgress(100);
+        toast.success(`📊 ประมวลผล ${summaryData.length} sensors สำเร็จ`);
+      },
+      error: (err) => {
+        console.error("Parse error:", err);
+        toast.error("❌ เกิดข้อผิดพลาดระหว่างอ่าน CSV");
+      },
     });
-
-    setSummary(summaryData);
-    toast.success(`📊 ประมวลผล ${summaryData.length} sensors สำเร็จ`);
   };
 
   // 💾 Save to DB
-  // 💾 Save to DB
   const saveToDB = async () => {
-    // ✅ กันซ้ำ: วัน+กะ ห้ามซ้ำ
     const exists = records.some(
       (r) =>
         new Date(r.date).toISOString().slice(0, 10) === meta.date &&
@@ -99,9 +169,7 @@ export default function SensorSummaryPage() {
     );
 
     if (exists) {
-      toast.error(
-        `❌ วันที่ ${meta.date} (${meta.shift}) มีอยู่แล้วในฐานข้อมูล`
-      );
+      toast.error(`❌ วันที่ ${meta.date} (${meta.shift}) มีอยู่แล้ว`);
       return;
     }
 
@@ -160,12 +228,12 @@ export default function SensorSummaryPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* History View */}
+        {/* History */}
         <TabsContent value="history">
           <SensorHistoryTable />
         </TabsContent>
 
-        {/* Import View */}
+        {/* Import */}
         <TabsContent value="import">
           <Card className="p-6 space-y-5 shadow-md border border-gray-200 bg-white/80 backdrop-blur-sm rounded-2xl">
             <div className="grid sm:grid-cols-3 gap-4">
@@ -193,7 +261,6 @@ export default function SensorSummaryPage() {
                   <SelectContent>
                     <SelectItem value="Day">Day</SelectItem>
                     <SelectItem value="Night">Night</SelectItem>
-                    <SelectItem value="OT">OT</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -230,48 +297,60 @@ export default function SensorSummaryPage() {
               className="hidden"
             />
 
-            {summary.length > 0 && (
-              <div className="overflow-auto max-h-[400px] mt-4 rounded-lg border">
-                <Table className="min-w-full text-xs">
-                  <TableHeader>
-                    <TableRow className="bg-blue-100/80">
-                      <TableCell className="font-semibold text-gray-700">
-                        Sensor
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        Min
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        Avg
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        Max
-                      </TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {summary.map((s, i) => (
-                      <TableRow key={i} className="hover:bg-blue-50 transition">
-                        <TableCell>{s.sensor}</TableCell>
-                        <TableCell className="text-right">{s.min}</TableCell>
-                        <TableCell className="text-right">{s.avg}</TableCell>
-                        <TableCell className="text-right">{s.max}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+            {progress > 0 && progress < 100 && (
+              <div className="mt-2">
+                <Progress value={progress} />
+                <p className="text-xs text-gray-500 mt-1 text-right">
+                  กำลังอ่านไฟล์... {progress}%
+                </p>
               </div>
             )}
 
             {summary.length > 0 && (
-              <div className="flex justify-end mt-4">
-                <Button
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={saveToDB}
-                >
-                  <Database className="w-4 h-4 mr-1" /> บันทึกลงฐานข้อมูล
-                </Button>
-              </div>
+              <>
+                <div className="overflow-auto max-h-[400px] mt-4 rounded-lg border">
+                  <Table className="min-w-full text-xs">
+                    <TableHeader>
+                      <TableRow className="bg-blue-100/80">
+                        <TableCell className="font-semibold text-gray-700">
+                          Sensor
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          Min
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          Avg
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          Max
+                        </TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {summary.map((s, i) => (
+                        <TableRow
+                          key={i}
+                          className="hover:bg-blue-50 transition"
+                        >
+                          <TableCell>{s.sensor}</TableCell>
+                          <TableCell className="text-right">{s.min}</TableCell>
+                          <TableCell className="text-right">{s.avg}</TableCell>
+                          <TableCell className="text-right">{s.max}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={saveToDB}
+                  >
+                    <Database className="w-4 h-4 mr-1" /> บันทึกลงฐานข้อมูล
+                  </Button>
+                </div>
+              </>
             )}
           </Card>
         </TabsContent>
