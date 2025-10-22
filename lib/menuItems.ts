@@ -28,7 +28,7 @@ export const menuItems = [
     Icon: FolderKanban,
     children: [
       { label: "Daily Report", Icon: CircleCheckBig, path: "/daily-check" },
-      { label: "Problem Report", Icon: Cog, path: "/problem/reprot" },
+      { label: "Problem Report", Icon: Cog, path: "/problem/report" },
       { label: "Fuel Use", Icon: Fuel, path: "/fuel-use" },
       { label: "Temp / Pressure", Icon: Thermometer, path: "/temp-pressure" },
       { label: "Maintenance", Icon: Construction, path: "/maintenance" },
