@@ -11,6 +11,8 @@ import {
   Thermometer,
   FolderKanban,
   Settings,
+  CircleCheckBig,
+  Cog,
 } from "lucide-react";
 
 export const menuItems = [
@@ -25,6 +27,8 @@ export const menuItems = [
     label: "Report",
     Icon: FolderKanban,
     children: [
+      { label: "Daily Report", Icon: CircleCheckBig, path: "/daily-check" },
+      { label: "Problem Report", Icon: Cog, path: "/problem/reprot" },
       { label: "Fuel Use", Icon: Fuel, path: "/fuel-use" },
       { label: "Temp / Pressure", Icon: Thermometer, path: "/temp-pressure" },
       { label: "Maintenance", Icon: Construction, path: "/maintenance" },
