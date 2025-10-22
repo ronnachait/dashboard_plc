@@ -4,10 +4,9 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const logs = await prisma.fuelLog.findMany({
     include: { vehicle: true },
-    orderBy: { date: "desc" },
+    orderBy: { date: "asc" }, // ✅ คำนวณจากเก่าไปใหม่
   });
 
-  // คำนวณคงเหลือสะสมของแต่ละรถ
   const balanceMap: Record<string, number> = {};
   const logsWithBalance = logs.map((log) => {
     const vid = log.vehicleId;
@@ -18,6 +17,9 @@ export async function GET() {
       balance: balanceMap[vid],
     };
   });
+
+  // ✅ กลับลำดับเพื่อให้แสดงใหม่สุดบนสุด
+  logsWithBalance.reverse();
 
   return Response.json({ logs: logsWithBalance });
 }

@@ -1,319 +1,300 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useSession } from "next-auth/react";
-import { sectionList } from "@/lib/section";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
+import { Loader2, Upload, X } from "lucide-react";
+import Image from "next/image";
+export default function ProblemFormPage() {
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [images, setImages] = useState<File[]>([]);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const dropRef = useRef<HTMLDivElement | null>(null);
 
-type ProblemForm = {
-  reporter: string;
-  hour: string;
-  section: string;
-  partNo: string;
-  partName: string;
-  newPart: string;
-  operatingHours: string;
-  cycles: string;
-  classification: string;
-  status: string;
-  detailTH: string;
-  causeTH: string;
-  images: string[];
-};
-
-export default function ProblemReportPage() {
-  const [currentHour, setCurrentHour] = useState<number>(0);
-
+  // ✅ โหลด token จาก URL หรือ localStorage
   useEffect(() => {
-    const fetchVehicle = async () => {
-      try {
-        const res = await fetch(
-          "/api/vehicle/23429582-fbfd-4c7b-95c1-10c17b3dfebb"
-        );
-        if (res.ok) {
+    const url = new URL(window.location.href);
+    const tokenParam = url.searchParams.get("token");
+    const stored = localStorage.getItem("google_token");
+
+    const finalToken = tokenParam || stored;
+    if (tokenParam) {
+      localStorage.setItem("google_token", tokenParam);
+      window.history.replaceState(null, "", "/problem");
+    }
+
+    if (finalToken) {
+      setToken(finalToken);
+      fetch(`/api/google/userinfo?token=${finalToken}`)
+        .then(async (res) => {
+          if (res.status === 401) {
+            // ✅ Token หมดอายุ → ล้าง token แล้วให้ login ใหม่
+            localStorage.removeItem("google_token");
+            toast.warning("🔒 Token หมดอายุ กรุณาเข้าสู่ระบบใหม่");
+            window.location.href = "/api/google/auth";
+            return;
+          }
           const data = await res.json();
-          setCurrentHour(data.vehicle?.lastHourAfterTest ?? 0);
-        }
-      } catch (err) {
-        console.error("❌ Fetch vehicle error:", err);
-      }
-    };
-    fetchVehicle();
+          if (data.email) setUserEmail(data.email);
+        })
+        .catch(() => toast.error("ไม่สามารถดึงข้อมูลผู้ใช้ได้"));
+    }
   }, []);
 
-  // ดึงข้อมูลผู้ใช้
-  const { data: session, status } = useSession();
-  // const role = session?.user?.role;
-  const email = session?.user?.email ?? "";
+  const handleAuthorize = () => {
+    const currentUrl = window.location.pathname; // เช่น /problem หรือ /daily-check
+    window.location.href = `/api/google/auth?redirect=${encodeURIComponent(
+      currentUrl
+    )}`;
+  };
 
-  const [form, setForm] = useState<ProblemForm>({
-    reporter: "",
-    hour: "",
-    section: "",
-    partNo: "",
-    partName: "",
-    newPart: "",
-    operatingHours: "",
-    cycles: "",
-    classification: "",
-    status: "",
-    detailTH: "",
-    causeTH: "",
-    images: [],
-  });
-
+  // 🎯 Drag & Drop Upload
   useEffect(() => {
-    if (status === "authenticated" && email) {
-      setForm((prev) => ({ ...prev, reporter: email }));
+    const dropZone = dropRef.current;
+    if (!dropZone) return;
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        setImages((prev) => [...prev, ...Array.from(files)]);
+      }
+
+      dropZone.classList.remove("border-sky-500");
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      dropZone.classList.add("border-sky-500");
+    };
+
+    const handleDragLeave = () => {
+      dropZone.classList.remove("border-sky-500");
+    };
+
+    dropZone.addEventListener("drop", handleDrop);
+    dropZone.addEventListener("dragover", handleDragOver);
+    dropZone.addEventListener("dragleave", handleDragLeave);
+    return () => {
+      dropZone.removeEventListener("drop", handleDrop);
+      dropZone.removeEventListener("dragover", handleDragOver);
+      dropZone.removeEventListener("dragleave", handleDragLeave);
+    };
+  }, []);
+
+  // 🔥 Submit
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!token) return toast.error("ไม่มี token กรุณา login ใหม่");
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    formData.append("token", token);
+    images.forEach((file, i) => formData.append(`file_${i + 1}`, file));
+
+    try {
+      const res = await fetch("/api/problem", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        toast.success("✅ บันทึกข้อมูลเรียบร้อย!");
+        setImages([]);
+        e.currentTarget.reset();
+      } else {
+        toast.error("❌ ไม่สามารถบันทึกข้อมูลได้");
+      }
+    } catch {
+      toast.error("⚠️ เกิดข้อผิดพลาดขณะส่งข้อมูล");
+    } finally {
+      setLoading(false);
+      setUploadProgress(0);
     }
-  }, [status, email]);
-
-  const handleChange = (key: keyof ProblemForm, value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    const urls = Array.from(files).map((f) => URL.createObjectURL(f));
-    setForm((prev) => ({ ...prev, images: [...prev.images, ...urls] }));
   };
 
-  const handleSubmit = () => {
-    console.log("📤 ส่งข้อมูล:", form);
-    alert("✅ บันทึกข้อมูลเรียบร้อย");
-  };
+  if (!token)
+    return (
+      <div className="flex flex-col items-center justify-center h-screen space-y-4 text-center">
+        <h1 className="text-2xl font-semibold text-sky-700">
+          🔐 กรุณาเข้าสู่ระบบ Google ก่อน
+        </h1>
+        <p className="text-gray-600 text-sm">
+          เพื่อเชื่อมต่อสิทธิ์บันทึกข้อมูลไปยัง Google Sheet
+        </p>
+        <Button
+          onClick={handleAuthorize}
+          className="bg-sky-600 hover:bg-sky-700 text-white"
+        >
+          Sign in with Google
+        </Button>
+      </div>
+    );
 
+  // 🧾 Form UI
   return (
-    <div className="flex flex-col items-center bg-gray-50 min-h-screen py-6 px-3 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-white shadow-lg rounded-2xl border border-gray-200 p-5 sm:p-8 space-y-6">
-        {/* โลโก้ + หัวเรื่อง */}
-        <div className="flex flex-col items-center text-center">
-          <div className="relative w-28 h-10 sm:w-36 sm:h-12">
-            <Image
-              src="/kubota-logo.png"
-              alt="Kubota"
-              fill
-              sizes="(max-width: 640px) 100px, 140px"
-              className="object-contain"
-              onError={(e) => (e.currentTarget.style.display = "none")}
-            />
-          </div>
-          <h1 className="text-lg sm:text-xl md:text-2xl font-semibold mt-2 text-gray-800">
-            CYLINDER BENCH TEST PROBLEM
-          </h1>
-        </div>
+    <motion.div
+      className="max-w-5xl mx-auto p-6 space-y-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+    >
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-sky-700">
+          🧩 Cylinder Bench Test Problem
+        </h1>
+        <p className="text-gray-500 text-sm mt-1">
+          ฟอร์มรายงานปัญหา – Bench Test
+        </p>
+      </div>
 
-        {/* ฟอร์ม */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <div className="sm:col-span-2">
-            <Label>Report By</Label>
-            <Input value={form.reporter} disabled className="bg-gray-100" />
-          </div>
-
-          <div>
-            <Label>Hour (M/C) ชั่วโมงรถ</Label>
-            <Input
-              value={currentHour}
-              onChange={(e) => {
-                handleChange("hour", e.target.value);
-                setCurrentHour(Number(e.target.value));
-              }}
-            />
-          </div>
-
-          <select
-            className="block w-full border rounded-md p-2 text-sm sm:text-base bg-white"
-            value={form.section}
-            onChange={(e) => handleChange("section", e.target.value)}
+      <Card className="shadow-lg border border-gray-200">
+        <CardContent className="p-6 space-y-6">
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
           >
-            <option value="">เลือก / select...</option>
-            {sectionList.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <div>
-            <Label>Part No. / หมายเลขชิ้นส่วน</Label>
-            <Input
-              value={form.partNo}
-              onChange={(e) => handleChange("partNo", e.target.value)}
-            />
-          </div>
+            {/* LEFT */}
+            <div className="space-y-4">
+              <Label>Reported By</Label>
+              <Input value={userEmail} readOnly className="bg-gray-100" />
 
-          <div>
-            <Label>Part Name / ชื่อชิ้นส่วน</Label>
-            <Input
-              value={form.partName}
-              onChange={(e) => handleChange("partName", e.target.value)}
-            />
-          </div>
+              <Label>Hour (M/C)</Label>
+              <Input name="hour_M_C" type="number" step="0.001" required />
 
-          <div>
-            <Label>New part / ชิ้นส่วนใหม่</Label>
-            <select
-              className="block w-full border rounded-md p-2 text-sm sm:text-base bg-white"
-              value={form.newPart}
-              onChange={(e) => handleChange("newPart", e.target.value)}
-            >
-              <option value="">เลือก / select...</option>
-              <option value="Old">Old / เก่า</option>
-              <option value="New">New / ใหม่</option>
-            </select>
-          </div>
-
-          <div>
-            <Label>Operating hours of part / ชั่วโมงใช้งานของชิ้นส่วน</Label>
-            <Input
-              value={form.operatingHours}
-              onChange={(e) => handleChange("operatingHours", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label>Cycles / จำนวนรอบทดสอบ</Label>
-            <Input
-              value={form.cycles}
-              onChange={(e) => handleChange("cycles", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label>Classification / หมวดหมู่ของปัญหา</Label>
-            <select
-              className="block w-full border rounded-md p-2 text-sm sm:text-base bg-white"
-              value={form.classification}
-              onChange={(e) => handleChange("classification", e.target.value)}
-            >
-              <option value="">เลือก / select...</option>
-              <option value="Leakage">Leakage</option>
-              <option value="Abnormal working">Abnormal working</option>
-              <option value="Design error">Design error</option>
-              <option value="Part damage">Part damage</option>
-            </select>
-          </div>
-
-          <div>
-            <Label>Status / สถานะ</Label>
-            <select
-              className="block w-full border rounded-md p-2 text-sm sm:text-base bg-white"
-              value={form.status}
-              onChange={(e) => handleChange("status", e.target.value)}
-            >
-              <option value="">เลือก / select...</option>
-              <option value="Monitoring">Monitoring</option>
-              <option value="Done">Done</option>
-              <option value="Modify">Modify</option>
-            </select>
-          </div>
-
-          <div className="sm:col-span-2">
-            <Label>Problems content (TH) / รายละเอียดของปัญหา ภาษาไทย</Label>
-            <Textarea
-              value={form.detailTH}
-              onChange={(e) => handleChange("detailTH", e.target.value)}
-              className="resize-y min-h-[100px]"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <Label>Cause of problem (TH) / สาเหตุของปัญหา ภาษาไทย</Label>
-            <Textarea
-              value={form.causeTH}
-              onChange={(e) => handleChange("causeTH", e.target.value)}
-              className="resize-y min-h-[100px]"
-            />
-          </div>
-
-          {/* Upload */}
-          <div className="sm:col-span-2">
-            <Label className="block text-gray-700 font-medium mb-2">
-              แนบรูปภาพหลายไฟล์{" "}
-              <span className="text-gray-500 text-sm">
-                (ZoomIn / ZoomOut / รูปปัญหา 1–5)
-              </span>
-            </Label>
-
-            <div className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-sky-300 rounded-xl bg-sky-50 hover:bg-sky-100 transition">
-              <div className="flex flex-col items-center justify-center pointer-events-none">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-8 h-8 mb-2 text-sky-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12v8m0-8l-3 3m3-3l3 3M12 4v8"
-                  />
-                </svg>
-                <p className="text-sm text-gray-600 font-semibold">
-                  คลิกเพื่ออัปโหลด หรือ ลากไฟล์มาวาง
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  รองรับ .JPG .PNG (หลายไฟล์พร้อมกัน)
-                </p>
-              </div>
-              <input
-                id="file-upload"
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleFileChange}
-                className="absolute inset-0 opacity-0 cursor-pointer"
+              <Label>Section</Label>
+              <Input
+                name="dept"
+                placeholder="Feeder / Blower / Topper"
+                required
               />
+
+              <Label>Part No.</Label>
+              <Input name="part_num" placeholder="5T2166102W" />
+
+              <Label>Part Name</Label>
+              <Input name="part_name" placeholder="CASE(UPPER,BLOWER)" />
+
+              <Label>Status</Label>
+              <select
+                name="Status"
+                className="border rounded-md px-2 py-2 w-full"
+              >
+                <option value="">เลือก / select..</option>
+                <option value="Done">Done</option>
+                <option value="Waiting">Waiting</option>
+                <option value="Checking">Checking</option>
+              </select>
             </div>
 
-            {/* Preview */}
-            {form.images.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4">
-                {form.images.map((src, i) => (
-                  <div
-                    key={i}
-                    className="relative aspect-square w-full overflow-hidden rounded-lg border group"
-                  >
-                    <Image
-                      src={src}
-                      alt={`upload-${i}`}
-                      fill
-                      unoptimized
-                      className="object-cover group-hover:opacity-90"
-                    />
-                    <button
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          images: prev.images.filter((_, idx) => idx !== i),
-                        }))
-                      }
-                      className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white text-xs rounded-full p-1 sm:p-1.5 transition"
-                      title="ลบรูปนี้"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+            {/* RIGHT */}
+            <div className="space-y-4">
+              <Label>Problem Detail (TH)</Label>
+              <Textarea
+                name="Problems"
+                placeholder="Stopper blower ฝั่ง LH เริ่มงอ..."
+                className="h-24"
+              />
 
-        <div className="pt-4">
-          <Button
-            className="w-full py-3 text-base sm:text-lg font-medium"
-            onClick={handleSubmit}
-          >
-            บันทึกข้อมูล
-          </Button>
-        </div>
-      </div>
-    </div>
+              <Label>Cause of Problem (TH)</Label>
+              <Textarea
+                name="cause"
+                placeholder="แรงลมตีกระแทกด้านเดียว"
+                className="h-24"
+                required
+              />
+
+              <Label>แนบรูปภาพ (สูงสุด 5)</Label>
+              <div
+                ref={dropRef}
+                className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-sky-400 transition cursor-pointer"
+              >
+                <Upload className="mx-auto text-gray-400 mb-2" />
+                <p className="text-gray-500 text-sm">
+                  Drag & Drop หรือคลิกเพื่อเลือกไฟล์
+                </p>
+                <Input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) =>
+                    setImages([
+                      ...images,
+                      ...(e.target.files ? Array.from(e.target.files) : []),
+                    ])
+                  }
+                  className="hidden"
+                />
+              </div>
+
+              {/* Preview Zone */}
+              <div className="flex flex-wrap gap-3 mt-3">
+                <AnimatePresence>
+                  {images.map((file, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="relative w-24 h-24 border rounded-lg overflow-hidden group"
+                    >
+                      <Image
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        fill
+                        className="object-cover group-hover:opacity-80 transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setImages((prev) =>
+                            prev.filter((_, idx) => idx !== i)
+                          )
+                        }
+                        className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      >
+                        <X size={12} />
+                      </button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Progress Bar */}
+              {loading && (
+                <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-sky-600 h-2 rounded-full transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-sky-600 hover:bg-sky-700 text-white py-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
+                    กำลังบันทึก...
+                  </>
+                ) : (
+                  "💾 บันทึกข้อมูล"
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }

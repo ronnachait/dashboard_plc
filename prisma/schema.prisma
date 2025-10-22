@@ -70,6 +70,7 @@ model Vehicle {
   updatedAt          DateTime          @default(now()) @updatedAt
   fuelLogs           FuelLog[]
   greasePoints       GreasePoint[]
+  greaseLog          GreaseLog[]
   maintenancePlans   MaintenancePlan[] // ✅ เพิ่มบรรทัดนี้
 }
 
@@ -98,7 +99,25 @@ model GreasePoint {
   picture        String? // path รูปประกอบ
   vehicleId      String
   vehicle        Vehicle @relation(fields: [vehicleId], references: [id])
+  greaseLog          GreaseLog[]
 }
+
+model GreaseLog {
+  id             String       @id @default(uuid())
+  greasePointId  String
+  greasePoint    GreasePoint  @relation(fields: [greasePointId], references: [id])
+
+  vehicleId      String
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id])
+
+  shift          String       // "MORNING" | "NIGHT"
+  date           DateTime     // วันที่อัดจารบี
+  hourMeter      Float?       // ชั่วโมงตอนอัด (optional)
+  createdBy      String?      // email / userId ของผู้บันทึก
+  note           String?      // บันทึกเพิ่มเติม
+  createdAt      DateTime     @default(now())
+}
+
 
 model MaintenanceTemplate {
   id         String            @id @default(uuid())
@@ -161,6 +180,5 @@ model SensorSummaryBatch {
   hourMeter Float?
   sensors   Json     // 👉 เก็บ sensor summary ทั้งหมดใน JSON
   createdAt DateTime @default(now())
-  @@unique([date, shift]) // ✅ กันซ้ำระดับ DB
 }
 
