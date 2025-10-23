@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.NEXT_PUBLIC_SHEET_ID!,
-    range: "2_Daily check!B7:AC",
+    range: "2_Daily check!B7:AH",
   });
 
   const rows = res.data.values;
@@ -82,11 +82,28 @@ export async function GET(req: Request) {
   );
   const totalHr = parseFloat((totalMin / 60).toFixed(2));
 
+  // หาชุดแรกที่เจอในกะนั้นที่มีค่า HYD หรือ E/G
+  let firstHyd = "";
+  let firstEG = "";
+
+  for (const row of filtered) {
+    const hyd = row[31]; // AG = index 32 (เริ่มนับจาก B = 0)
+    const eg = row[32]; // AH = index 33
+    if (!firstHyd && hyd) firstHyd = hyd;
+    if (!firstEG && eg) firstEG = eg;
+    if (firstHyd && firstEG) break; // เจอครบแล้วหยุดเลย
+  }
+
+  console.log("firstHyd", firstHyd);
+  console.log("firstEG", firstEG);
+
   return NextResponse.json({
     date: dateParam,
     shift,
     records: filtered.length,
     totalMinutes: totalMin,
     totalHours: totalHr,
+    firstHYD: firstHyd || "-",
+    firstEG: firstEG || "-",
   });
 }

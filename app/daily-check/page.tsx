@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader } from "@/components/ui/loader";
 import { Clock, Fuel, Gauge, Copy } from "lucide-react";
+import { toast } from "sonner";
 
 type ProblemItem = {
   date?: string;
@@ -15,6 +16,7 @@ type ProblemItem = {
   partName?: string;
   detail?: string;
   action?: string;
+  needSolution?: boolean; // ✅ เพิ่มบรรทัดนี้
 };
 
 type DailyData = {
@@ -22,7 +24,10 @@ type DailyData = {
   fuelIn: number;
   fuelUsed: number;
   engineHour: string;
+  engineHourTest: number;
   subtankLevel: string;
+  firstHyd: string;
+  firstEG: string;
   problems: ProblemItem[];
 };
 
@@ -84,9 +89,10 @@ export default function DailyCheckPage() {
 
       // 👇 ถ้า token หมดอายุ (401) → ล้าง token แล้วให้ login ใหม่
       if (sheetRes.status === 401) {
-        const data = await sheetRes.json();
-        alert("🔑 Token หมดอายุ กรุณาเข้าสู่ระบบใหม่");
-        window.location.href = data.loginUrl;
+        // ✅ Token หมดอายุ → ล้าง token แล้วให้ login ใหม่
+        localStorage.removeItem("google_token");
+        toast.warning("🔒 Token หมดอายุ กรุณาเข้าสู่ระบบใหม่");
+        window.location.href = "/api/google/auth";
         return;
       }
 
@@ -94,6 +100,7 @@ export default function DailyCheckPage() {
         throw new Error("ไม่สามารถดึงข้อมูลจาก Google Sheet ได้");
       const sheetData = await sheetRes.json();
 
+      console.log("sheetData", sheetData);
       const dbRes = await fetch(`/api/fuel/log?date=${date}&shift=${shift}`);
       if (!dbRes.ok) throw new Error("ไม่สามารถดึงข้อมูลน้ำมันจากฐานข้อมูลได้");
       const db = await dbRes.json();
@@ -112,13 +119,21 @@ export default function DailyCheckPage() {
         "/api/vehicle/23429582-fbfd-4c7b-95c1-10c17b3dfebb"
       );
       const vehicleData = vehicleRes.ok ? await vehicleRes.json() : null;
-
+      const before = Number(vehicleData?.vehicle?.lastHourBeforeTest ?? 0);
+      const after = Number(vehicleData?.vehicle?.lastHourAfterTest ?? 0);
+      const engineHourTest = after - before;
       setData({
         totalHours: sheetData.totalHours ?? 0,
         fuelIn: db.fuelIn ?? 0,
         fuelUsed: db.fuelUsed ?? 0,
         engineHour: vehicleData?.vehicle?.lastHourAfterTest?.toString() ?? "-",
+        engineHourTest: engineHourTest,
         subtankLevel: db.subtankLevel ?? "-",
+
+        // ✅ เอามาจาก sheetData ไม่ใช่ db
+        firstHyd: String(sheetData.firstHYD ?? ""), // normalize: HYD -> Hyd
+        firstEG: String(sheetData.firstEG ?? ""),
+
         problems:
           Array.isArray(problemData.problems) && problemData.problems.length > 0
             ? problemData.problems
@@ -141,6 +156,8 @@ export default function DailyCheckPage() {
     const hourPercent = ((data.totalHours / targetHours) * 100).toFixed(0);
 
     const text = `
+*Daily Check*
+
 📅 วันที่: ${date} (${shift === "day" ? "กะกลางวัน" : "กะกลางคืน"})
 ⏱ ชั่วโมงทดสอบ: ${data.totalHours.toFixed(
       1
@@ -148,11 +165,14 @@ export default function DailyCheckPage() {
 ⛽ ซื้อน้ำมัน: ${data.fuelIn} ลิตร
 🔥 ใช้น้ำมัน: ${data.fuelUsed} ลิตร
 ⚙️ ชั่วโมงรถล่าสุด: ${data.engineHour} ชม.
+⚙️ ชั่วโมงการทดสอบ: ${data.engineHourTest} ชม.
 
-🛢 ระดับน้ำมันเครื่องยนต์: ${engineOil} ${
+🛢 ระดับน้ำมันเครื่องยนต์: ${engineOil} - ${data?.firstEG || "-"} mm ${
       engineOilNote ? `(${engineOilNote})` : ""
     }
-🧊 ระดับน้ำมันซับแทงค์: ${subTank} ${subTankNote ? `(${subTankNote})` : ""}
+🧊 ระดับน้ำมันซับแทงค์: ${subTank} - ${data?.firstHyd || "-"} mm ${
+      subTankNote ? `(${subTankNote})` : ""
+    }
 💨 ความดันทุกจุด: ${pressure} ${pressureNote ? `(${pressureNote})` : ""}
 🌡 อุณหภูมิทุกจุด: ${temp} ${tempNote ? `(${tempNote})` : ""}
 
@@ -160,7 +180,12 @@ export default function DailyCheckPage() {
 ${
   data.problems.length > 0
     ? data.problems
-        .map((p, i) => `${i + 1}. ${p.section}: ${p.partName} - ${p.detail}`)
+        .map(
+          (p, i) =>
+            `${i + 1}. ${p.section}: ${p.partName} - ${p.detail}${
+              p.needSolution ? " (ต้องการแนวทางการแก้ไข)" : ""
+            }`
+        )
         .join("\n")
     : "ไม่มี"
 }
@@ -245,8 +270,13 @@ ${
               <b>{data.fuelUsed}</b> ลิตร
             </div>
             <div className="flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-green-600" /> ชั่วโมงรถล่าสุด:
+              <Gauge className="w-5 h-5 text-red-600" /> ชั่วโมงรถล่าสุด:
               <b>{data.engineHour}</b> ชม
+            </div>
+            <div className="flex items-center gap-2">
+              <Gauge className="w-5 h-5 text-green-600" />{" "}
+              ชั่วโมงการทดสอบทั้งหมด:
+              <b>{data.engineHourTest}</b> ชม
             </div>
 
             {/* dropdowns */}
@@ -257,6 +287,7 @@ ${
                 setState: setEngineOil,
                 note: engineOilNote,
                 setNote: setEngineOilNote,
+                level: data?.firstEG || "-", // 👈 เพิ่ม
               },
               {
                 label: "ระดับน้ำมันซับแทงค์",
@@ -264,6 +295,7 @@ ${
                 setState: setSubTank,
                 note: subTankNote,
                 setNote: setSubTankNote,
+                level: data?.firstHyd || "-", // 👈 เพิ่ม
               },
               {
                 label: "ความดันทุกจุด",
@@ -282,7 +314,7 @@ ${
             ].map((item, i) => (
               <div key={i}>
                 <Label>{item.label}</Label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2 mt-1 items-center">
                   <select
                     className="border rounded px-2 py-1"
                     value={item.state}
@@ -291,6 +323,14 @@ ${
                     <option>ปกติ</option>
                     <option>มีปัญหา</option>
                   </select>
+
+                  {/* ✅ โชว์ระดับจริงจาก Sheet */}
+                  {item.level && (
+                    <span className="text-gray-500 text-sm">
+                      ( {item.level} mm )
+                    </span>
+                  )}
+
                   {item.state === "มีปัญหา" && (
                     <Input
                       placeholder="ระบุสาเหตุ..."
@@ -303,13 +343,44 @@ ${
             ))}
 
             {/* problems */}
+            {/* problems */}
             <div>
               <Label className="font-semibold">ปัญหาที่เกิดขึ้น</Label>
+
               {data.problems.length > 0 ? (
-                <ul className="pl-6 list-disc mt-2 text-gray-700 space-y-1">
+                <ul className="pl-6 list-disc mt-2 text-gray-700 space-y-3">
                   {data.problems.map((p, i) => (
-                    <li key={i}>
-                      <b>{p.section}</b>: {p.partName} — {p.detail}
+                    <li key={i} className="space-y-1">
+                      <div className="flex flex-col">
+                        <span>
+                          <b>{p.section}</b>: {p.partName} — {p.detail}{" "}
+                          {p.needSolution && (
+                            <span className="text-sky-600 text-sm font-medium">
+                              (ต้องการแนวทางการแก้ไข)
+                            </span>
+                          )}
+                        </span>
+
+                        {/* ✅ checkbox แยกแต่ละปัญหา */}
+                        <label className="flex items-center gap-2 ml-1 mt-1 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={p.needSolution || false}
+                            onChange={(e) => {
+                              const updated = [...data.problems];
+                              updated[i] = {
+                                ...p,
+                                needSolution: e.target.checked,
+                              };
+                              setData({ ...data, problems: updated });
+                            }}
+                            className="w-4 h-4 accent-sky-600 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-700">
+                            ต้องการแนวทางการแก้ไข
+                          </span>
+                        </label>
+                      </div>
                     </li>
                   ))}
                 </ul>
