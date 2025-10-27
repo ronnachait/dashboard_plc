@@ -48,11 +48,12 @@ model NgrokTunnel {
 }
 
 model User {
-  id       String  @id @default(uuid())
-  name     String?
-  email    String  @unique
-  password String
-  role     String
+  id          String        @id @default(uuid())
+  name        String?
+  email       String        @unique
+  password    String
+  role        String
+  googleToken GoogleToken?
 }
 
 enum Shift {
@@ -180,5 +181,18 @@ model SensorSummaryBatch {
   hourMeter Float?
   sensors   Json     // 👉 เก็บ sensor summary ทั้งหมดใน JSON
   createdAt DateTime @default(now())
+}
+
+// ✅ Google Token Management
+model GoogleToken {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken  String   @db.Text
+  refreshToken String?  @db.Text
+  expiresAt    DateTime
+  scope        String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 

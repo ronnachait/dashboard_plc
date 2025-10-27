@@ -1,21 +1,42 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
-import { Readable } from "stream"; // 👈 เพิ่มตรงนี้
+import { Readable } from "stream";
+import { getServerSession } from "next-auth";
+import { getValidAccessToken } from "@/lib/googleTokenManager";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const token = formData.get("token") as string | null;
-    if (!token)
+    // ✅ ตรวจสอบ session
+    const session = await getServerSession();
+    if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Missing Google token" },
+        { error: "Not authenticated", needAuth: true },
         { status: 401 }
       );
+    }
+
+    // ✅ หา userId และดึง valid token
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const accessToken = await getValidAccessToken(user.id);
 
     const auth = new google.auth.OAuth2();
-    auth.setCredentials({ access_token: token });
+    auth.setCredentials({ access_token: accessToken });
     const drive = google.drive({ version: "v3", auth });
     const sheets = google.sheets({ version: "v4", auth });
+
+    const formData = await req.formData();
 
     const sheetId = process.env.NEXT_PUBLIC_SHEET_ID!;
     const folderId = process.env.NEXT_PUBLIC_DRIVE_FOLDER_ID!;
@@ -106,6 +127,19 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("❌ Problem upload error:", err);
+
+    // ถ้า error เกี่ยวกับ token
+    if (
+      err instanceof Error &&
+      (err.message.includes("authenticate") ||
+        err.message.includes("invalid_grant"))
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Google authentication required", needAuth: true },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json(
       { success: false, error: (err as Error).message },
       { status: 500 }

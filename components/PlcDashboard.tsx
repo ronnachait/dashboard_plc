@@ -312,26 +312,26 @@ export default function PlcDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-gray-100 min-h-screen">
+    <div className="p-6 space-y-6 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       {/* แจ้งเตือน error */}
       {plcNoResponse && (
-        <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 flex items-center gap-2 shadow">
-          <AlertTriangle className="h-5 w-5 text-red-600" />
+        <div className="p-3 rounded-lg border border-red-400 bg-red-50 text-red-700 flex items-center gap-2 shadow-lg animate-slide-in">
+          <AlertTriangle className="h-5 w-5 text-red-600 animate-pulse" />
           <span className="font-semibold">❌ ไม่สามารถเชื่อมต่อ PLC ได้</span>
         </div>
       )}
       {greaseAlerts.length > 0 && (
-        <div className="p-2.5 rounded-md border border-red-400 bg-red-50 text-red-700 shadow-sm text-xs">
+        <div className="p-3 rounded-lg border border-red-400 bg-gradient-to-r from-red-50 to-red-100 text-red-700 shadow-lg text-xs animate-slide-in">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-1 text-[13px]">
+            <h2 className="font-semibold flex items-center gap-1 text-sm">
               🛢️ จารบีครบ {greaseAlerts.length} จุด
             </h2>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+          <div className="mt-2 flex flex-wrap gap-2">
             {greaseAlerts.map((g) => (
               <span
                 key={g.id}
-                className="px-2 py-0.5 bg-red-100 border border-red-200 rounded-md text-[11px] font-medium text-red-800 whitespace-nowrap"
+                className="px-3 py-1 bg-red-100 border border-red-300 rounded-full text-xs font-medium text-red-800 whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
               >
                 จุด {g.pointNo}: {g.name}
               </span>
@@ -341,23 +341,23 @@ export default function PlcDashboard() {
       )}
 
       {alarm.active && (
-        <div className="p-3 rounded-lg border border-yellow-500 bg-yellow-50 text-yellow-800 shadow">
+        <div className="p-3 rounded-lg border border-yellow-500 bg-gradient-to-r from-yellow-50 to-yellow-100 text-yellow-800 shadow-lg animate-slide-in">
           ⚠️ Alarm ยังไม่ถูก Reset → {alarm.reason}
         </div>
       )}
 
       {maintenanceAlerts.length > 0 && (
-        <div className="p-2.5 rounded-md border border-yellow-400 bg-yellow-50 text-yellow-800 shadow-sm text-xs">
+        <div className="p-3 rounded-lg border border-yellow-400 bg-gradient-to-r from-yellow-50 to-yellow-100 text-yellow-800 shadow-lg text-xs animate-slide-in">
           <div className="flex items-center justify-between">
-            <h2 className="font-medium flex items-center gap-1 text-[13px]">
+            <h2 className="font-semibold flex items-center gap-1 text-sm">
               ⚙️ รอบบำรุงครบ {maintenanceAlerts.length} รายการ
             </h2>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+          <div className="mt-2 flex flex-wrap gap-2">
             {maintenanceAlerts.map((m) => (
               <span
                 key={m.id}
-                className="px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded-md text-[11px] font-medium text-yellow-800 whitespace-nowrap"
+                className="px-3 py-1 bg-yellow-100 border border-yellow-300 rounded-full text-xs font-medium text-yellow-800 whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
               >
                 {m.vehicleName} ({m.plateNo}) : {m.item}
               </span>
@@ -367,19 +367,19 @@ export default function PlcDashboard() {
       )}
 
       {/* Status + Controls */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-in">
         {/* System Status */}
         <div
-          className={`p-3 rounded-lg shadow border flex items-center gap-3 ${
+          className={`p-4 rounded-xl shadow-lg border flex items-center gap-3 card-hover ${
             systemStatus === "running"
-              ? "bg-green-50 border-green-400"
+              ? "bg-gradient-to-br from-green-50 to-green-100 border-green-400"
               : systemStatus === "offline"
-              ? "bg-gray-200 border-gray-400"
-              : "bg-red-50 border-red-400"
+              ? "bg-gradient-to-br from-gray-100 to-gray-200 border-gray-400"
+              : "bg-gradient-to-br from-red-50 to-red-100 border-red-400"
           }`}
         >
           <Activity
-            className={`h-5 w-5 ${
+            className={`h-6 w-6 ${
               systemStatus === "running"
                 ? "text-green-600"
                 : systemStatus === "offline"
@@ -388,16 +388,16 @@ export default function PlcDashboard() {
             } animate-pulse-slow`}
           />
           <div>
-            <p className="text-xs text-gray-600">System</p>
-            <p className="font-bold text-sm">{systemStatus}</p>
+            <p className="text-xs text-gray-600 font-medium">System</p>
+            <p className="font-bold text-sm capitalize">{systemStatus}</p>
           </div>
         </div>
 
         {/* Last Update */}
-        <div className="p-3 rounded-lg shadow border bg-white flex items-center gap-3">
-          <Wifi className="h-5 w-5 text-sky-500 animate-pulse-slow" />
+        <div className="p-4 rounded-xl shadow-lg border bg-gradient-to-br from-white to-slate-50 flex items-center gap-3 card-hover">
+          <Wifi className="h-6 w-6 text-sky-500 animate-pulse-slow" />
           <div>
-            <p className="text-xs text-gray-600">Last Update</p>
+            <p className="text-xs text-gray-600 font-medium">Last Update</p>
             <p className="font-bold text-sm text-gray-800">{lastUpdate}</p>
           </div>
         </div>
@@ -417,11 +417,11 @@ export default function PlcDashboard() {
         />
       </div>
       {/* Sensor Zones */}
-      <div className="space-y-8">
+      <div className="space-y-8 animate-slide-up">
         {/* 🔵 Cylinder Bench Test */}
-        <div className="p-4 rounded-lg shadow border bg-white">
-          <h2 className="text-lg font-bold text-blue-600 mb-3">
-            🔵 Cylinder Bench Test
+        <div className="p-6 rounded-2xl shadow-xl border border-blue-200 bg-gradient-to-br from-white to-blue-50 card-hover">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent mb-4 flex items-center gap-2">
+            <span className="text-2xl">🔵</span> Cylinder Bench Test
           </h2>
           {/* Cylinder Temp (3 จุด) */}
           <SensorChart
@@ -462,9 +462,9 @@ export default function PlcDashboard() {
         </div>
 
         {/* 🟢 Chopper Bench Test */}
-        <div className="p-4 rounded-lg shadow border bg-white">
-          <h2 className="text-lg font-bold text-green-600 mb-3">
-            🟢 Chopper Bench Test
+        <div className="p-6 rounded-2xl shadow-xl border border-green-200 bg-gradient-to-br from-white to-green-50 card-hover">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-green-600 to-green-800 bg-clip-text text-transparent mb-4 flex items-center gap-2">
+            <span className="text-2xl">🟢</span> Chopper Bench Test
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -555,21 +555,21 @@ export default function PlcDashboard() {
       </div>
 
       {/* Log Table */}
-      <div className="p-4 rounded-lg border bg-white shadow">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-semibold text-gray-700 text-sm">
-            📜 Recent Logs / บันทึกล่าสุด
+      <div className="p-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 shadow-xl card-hover">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+            <span className="text-xl">📜</span> Recent Logs / บันทึกล่าสุด
           </h3>
           <div className="flex gap-2">
             <button
               onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="px-3 py-1.5 rounded bg-gray-600 text-white text-sm hover:bg-gray-700 shadow"
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-gray-600 to-gray-700 text-white text-sm font-medium hover:from-gray-700 hover:to-gray-800 shadow-md hover:shadow-lg transition-all"
             >
               {sortOrder === "asc" ? "⬆️ เก่าก่อน" : "⬇️ ใหม่ก่อน"}
             </button>
             <button
               onClick={exportToCSV}
-              className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 shadow"
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all"
             >
               📥 Export CSV
             </button>

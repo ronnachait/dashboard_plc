@@ -17,6 +17,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/google/callback") || // ✅ เพิ่ม
     pathname.startsWith("/api/google/problem") || // ✅ เพิ่ม
     pathname.startsWith("/api/google/sheet") || // ✅ (optional สำหรับอ่าน sheet)
+    pathname.startsWith("/api/google/token") || // ✅ (optional สำหรับอ่าน sheet)
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     PUBLIC_FILE.test(pathname)

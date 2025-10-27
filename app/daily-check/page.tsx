@@ -32,7 +32,7 @@ type DailyData = {
 };
 
 export default function DailyCheckPage() {
-  const [token, setToken] = useState<string | null>(null);
+  const [hasGoogleAuth, setHasGoogleAuth] = useState(false);
   const [date, setDate] = useState("");
   const [shift, setShift] = useState<"day" | "night">("day");
   const [data, setData] = useState<DailyData | null>(null);
@@ -47,22 +47,21 @@ export default function DailyCheckPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ โหลด token จาก URL หรือ localStorage
+  // ✅ ตรวจสอบว่ามี Google Token หรือยัง
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const tokenParam = url.searchParams.get("token");
-    if (tokenParam) {
-      localStorage.setItem("google_token", tokenParam);
-      setToken(tokenParam);
-      window.history.replaceState(null, "", "/daily-check");
-    } else {
-      const stored = localStorage.getItem("google_token");
-      if (stored) setToken(stored);
-    }
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/google/token");
+        setHasGoogleAuth(res.ok);
+      } catch {
+        setHasGoogleAuth(false);
+      }
+    };
+    checkAuth();
   }, []);
 
   const handleAuthorize = () => {
-    const currentUrl = window.location.pathname; // เช่น /problem หรือ /daily-check
+    const currentUrl = window.location.pathname;
     window.location.href = `/api/google/auth?redirect=${encodeURIComponent(
       currentUrl
     )}`;
@@ -75,25 +74,24 @@ export default function DailyCheckPage() {
 
   // ✅ ดึงข้อมูลทั้งหมด
   const fetchData = async () => {
-    if (!token || !date) return;
+    if (!date) return;
     setLoading(true);
     setError(null);
     let problemData: { problems?: ProblemItem[] } = { problems: [] };
 
     try {
       const sheetRes = await fetch(
-        `/api/google/sheet?token=${token}&date=${formatDateForSheet(
-          date
-        )}&shift=${shift}`
+        `/api/google/sheet?date=${formatDateForSheet(date)}&shift=${shift}`
       );
 
-      // 👇 ถ้า token หมดอายุ (401) → ล้าง token แล้วให้ login ใหม่
+      // 👇 ถ้า token หมดอายุ (401) → ให้ authorize ใหม่
       if (sheetRes.status === 401) {
-        // ✅ Token หมดอายุ → ล้าง token แล้วให้ login ใหม่
-        localStorage.removeItem("google_token");
-        toast.warning("🔒 Token หมดอายุ กรุณาเข้าสู่ระบบใหม่");
-        window.location.href = "/api/google/auth";
-        return;
+        const data = await sheetRes.json();
+        if (data.needAuth) {
+          toast.warning("🔒 กรุณาเชื่อมต่อ Google Account");
+          handleAuthorize();
+          return;
+        }
       }
 
       if (!sheetRes.ok)
@@ -106,9 +104,7 @@ export default function DailyCheckPage() {
       const db = await dbRes.json();
 
       const problemRes = await fetch(
-        `/api/google/problem?token=${token}&date=${formatDateForSheet(
-          date
-        )}&shift=${shift}`
+        `/api/google/problem?date=${formatDateForSheet(date)}&shift=${shift}`
       );
       if (problemRes.ok) {
         const res = await problemRes.json();
@@ -195,57 +191,68 @@ ${
     alert("✅ คัดลอกรายงานเรียบร้อย! พร้อมแปะใน LINE ได้เลย");
   };
 
-  if (!token)
+  if (!hasGoogleAuth)
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <h1 className="text-2xl mb-4 font-semibold">📋 Daily Check</h1>
-        <Button onClick={handleAuthorize} className="bg-sky-600 text-white">
-          Sign in with Google
-        </Button>
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-slate-100">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-200 text-center max-w-md animate-scale-in">
+          <h1 className="text-3xl mb-4 font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
+            📋 Daily Check
+          </h1>
+          <p className="text-gray-600 mb-6">
+            ต้องเชื่อมต่อกับ Google Account เพื่อดึงข้อมูลจาก Sheets
+          </p>
+          <Button 
+            onClick={handleAuthorize} 
+            className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
+          >
+            🔗 Connect Google Account
+          </Button>
+        </div>
       </div>
     );
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-sky-700">
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="text-center animate-fade-in">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent mb-2">
           🧭 Daily Check Dashboard
         </h1>
-        <p className="text-gray-500 text-sm">
+        <p className="text-gray-500">
           ข้อมูลจาก Google Sheet + ฐานข้อมูลภายใน
         </p>
       </div>
 
       {/* ฟอร์มเลือกวันที่และกะ */}
-      <Card>
-        <CardContent className="pt-4 space-y-4">
+      <Card className="shadow-xl border-slate-200 animate-slide-up">
+        <CardContent className="pt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>ผลทดสอบวันที่</Label>
+              <Label className="text-gray-700 font-medium">ผลทดสอบวันที่</Label>
               <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                className="mt-1 shadow-sm"
               />
             </div>
             <div>
-              <Label>กะ</Label>
+              <Label className="text-gray-700 font-medium">กะ</Label>
               <select
-                className="border rounded px-2 py-1 w-full"
+                className="border border-gray-300 rounded-lg px-3 py-2 w-full mt-1 shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 value={shift}
                 onChange={(e) => setShift(e.target.value as "day" | "night")}
               >
-                <option value="day">กลางวัน</option>
-                <option value="night">กลางคืน</option>
+                <option value="day">กลางวัน ☀️</option>
+                <option value="night">กลางคืน 🌙</option>
               </select>
             </div>
           </div>
           <Button
             onClick={fetchData}
             disabled={!date || loading}
-            className="w-full bg-sky-600 text-white"
+            className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
           >
-            {loading ? "กำลังดึงข้อมูล..." : "ดึงข้อมูลจาก Sheet & DB"}
+            {loading ? "กำลังดึงข้อมูล... ⏳" : "ดึงข้อมูลจาก Sheet & DB 📊"}
           </Button>
         </CardContent>
       </Card>
@@ -254,8 +261,8 @@ ${
       {error && <p className="text-red-600 text-center font-medium">{error}</p>}
 
       {!loading && data && (
-        <Card>
-          <CardContent className="pt-4 space-y-3 text-sm sm:text-base">
+        <Card className="shadow-xl border-slate-200 animate-slide-up">
+          <CardContent className="pt-6 space-y-4 text-sm sm:text-base">
             {/* summary */}
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-sky-600" /> ชั่วโมงการทดสอบกะนี้:

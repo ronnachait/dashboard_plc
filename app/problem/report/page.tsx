@@ -11,45 +11,38 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Upload, X } from "lucide-react";
 import Image from "next/image";
 export default function ProblemFormPage() {
-  const [token, setToken] = useState<string | null>(null);
+  const [hasGoogleAuth, setHasGoogleAuth] = useState(false);
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const dropRef = useRef<HTMLDivElement | null>(null);
 
-  // ✅ โหลด token จาก URL หรือ localStorage
+  // ✅ ตรวจสอบว่ามี Google Token หรือยัง
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const tokenParam = url.searchParams.get("token");
-    const stored = localStorage.getItem("google_token");
-
-    const finalToken = tokenParam || stored;
-    if (tokenParam) {
-      localStorage.setItem("google_token", tokenParam);
-      window.history.replaceState(null, "", "/problem");
-    }
-
-    if (finalToken) {
-      setToken(finalToken);
-      fetch(`/api/google/userinfo?token=${finalToken}`)
-        .then(async (res) => {
-          if (res.status === 401) {
-            // ✅ Token หมดอายุ → ล้าง token แล้วให้ login ใหม่
-            localStorage.removeItem("google_token");
-            toast.warning("🔒 Token หมดอายุ กรุณาเข้าสู่ระบบใหม่");
-            window.location.href = "/api/google/auth";
-            return;
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/google/token");
+        if (res.ok) {
+          setHasGoogleAuth(true);
+          // ดึงข้อมูล user
+          const userinfoRes = await fetch("/api/google/userinfo");
+          if (userinfoRes.ok) {
+            const data = await userinfoRes.json();
+            if (data.email) setUserEmail(data.email);
           }
-          const data = await res.json();
-          if (data.email) setUserEmail(data.email);
-        })
-        .catch(() => toast.error("ไม่สามารถดึงข้อมูลผู้ใช้ได้"));
-    }
+        } else {
+          setHasGoogleAuth(false);
+        }
+      } catch {
+        setHasGoogleAuth(false);
+      }
+    };
+    checkAuth();
   }, []);
 
   const handleAuthorize = () => {
-    const currentUrl = window.location.pathname; // เช่น /problem หรือ /daily-check
+    const currentUrl = window.location.pathname;
     window.location.href = `/api/google/auth?redirect=${encodeURIComponent(
       currentUrl
     )}`;
@@ -92,11 +85,11 @@ export default function ProblemFormPage() {
   // 🔥 Submit
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!token) return toast.error("ไม่มี token กรุณา login ใหม่");
+    if (!hasGoogleAuth) return toast.error("กรุณาเชื่อมต่อ Google Account ก่อน");
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    formData.append("token", token);
+    // ไม่ต้องส่ง token แล้ว - server จะดึงเอง
     images.forEach((file, i) => formData.append(`file_${i + 1}`, file));
 
     try {
@@ -104,6 +97,16 @@ export default function ProblemFormPage() {
         method: "POST",
         body: formData,
       });
+
+      // ถ้า 401 = ต้อง re-auth
+      if (res.status === 401) {
+        const data = await res.json();
+        if (data.needAuth) {
+          toast.warning("🔒 กรุณาเชื่อมต่อ Google Account");
+          handleAuthorize();
+          return;
+        }
+      }
 
       const json = await res.json();
       if (json.success) {
@@ -121,21 +124,23 @@ export default function ProblemFormPage() {
     }
   };
 
-  if (!token)
+  if (!hasGoogleAuth)
     return (
-      <div className="flex flex-col items-center justify-center h-screen space-y-4 text-center">
-        <h1 className="text-2xl font-semibold text-sky-700">
-          🔐 กรุณาเข้าสู่ระบบ Google ก่อน
-        </h1>
-        <p className="text-gray-600 text-sm">
-          เพื่อเชื่อมต่อสิทธิ์บันทึกข้อมูลไปยัง Google Sheet
-        </p>
-        <Button
-          onClick={handleAuthorize}
-          className="bg-sky-600 hover:bg-sky-700 text-white"
-        >
-          Sign in with Google
-        </Button>
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-slate-100">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-200 text-center max-w-md animate-scale-in">
+          <h1 className="text-3xl mb-4 font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
+            🔐 Problem Report
+          </h1>
+          <p className="text-gray-600 mb-6">
+            ต้องเชื่อมต่อกับ Google Account เพื่อบันทึกข้อมูลไปยัง Google Sheet
+          </p>
+          <Button
+            onClick={handleAuthorize}
+            className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
+          >
+            🔗 Connect Google Account
+          </Button>
+        </div>
       </div>
     );
 
@@ -146,17 +151,17 @@ export default function ProblemFormPage() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-sky-700">
+      <div className="text-center animate-fade-in">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent mb-2">
           🧩 Cylinder Bench Test Problem
         </h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <p className="text-gray-500 mt-1">
           ฟอร์มรายงานปัญหา – Bench Test
         </p>
       </div>
 
-      <Card className="shadow-lg border border-gray-200">
-        <CardContent className="p-6 space-y-6">
+      <Card className="shadow-2xl border-slate-200 animate-slide-up">
+        <CardContent className="p-8 space-y-6">
           <form
             onSubmit={handleSubmit}
             className="grid grid-cols-1 md:grid-cols-2 gap-6"
@@ -280,15 +285,17 @@ export default function ProblemFormPage() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-sky-600 hover:bg-sky-700 text-white py-2"
+                className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white py-3 shadow-lg hover:shadow-xl transition-all font-medium"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
                     กำลังบันทึก...
                   </>
                 ) : (
-                  "💾 บันทึกข้อมูล"
+                  <>
+                    💾 บันทึกข้อมูล
+                  </>
                 )}
               </Button>
             </div>

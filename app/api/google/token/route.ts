@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { getValidAccessToken, verifyGoogleToken } from "@/lib/googleTokenManager";
+import { getValidAccessToken } from "@/lib/googleTokenManager";
 import { prisma } from "@/lib/prisma";
 
 /**
- * ✅ API สำหรับดึงข้อมูล User จาก Google
+ * ✅ API สำหรับดึง Google Access Token ของ User ที่ล็อกอิน
+ * - ตรวจสอบ session
+ * - ดึง token จาก DB
+ * - Auto-refresh ถ้าหมดอายุ
  */
 export async function GET() {
   try {
@@ -30,39 +33,34 @@ export async function GET() {
       );
     }
 
-    // ดึง valid token
+    // ดึง valid token (auto-refresh ถ้าจำเป็น)
     const accessToken = await getValidAccessToken(user.id);
 
-    // ตรวจสอบ token และดึงข้อมูล
-    const result = await verifyGoogleToken(accessToken);
-
-    if (!result.valid) {
-      return NextResponse.json(
-        { error: "Invalid token", needAuth: true },
-        { status: 401 }
-      );
-    }
-
     return NextResponse.json({
-      email: result.email,
-      name: result.name,
+      accessToken,
+      success: true,
     });
   } catch (error) {
-    console.error("❌ Userinfo fetch failed:", error);
+    console.error("❌ Token fetch failed:", error);
 
+    // ถ้า error เป็นเรื่อง authentication
     if (
       error instanceof Error &&
       error.message.includes("authenticate")
     ) {
       return NextResponse.json(
-        { error: "Google authentication required", needAuth: true },
+        {
+          error: "Google authentication required",
+          needAuth: true,
+        },
         { status: 401 }
       );
     }
 
     return NextResponse.json(
-      { error: "Failed to get user info" },
+      { error: "Failed to get token" },
       { status: 500 }
     );
   }
 }
+

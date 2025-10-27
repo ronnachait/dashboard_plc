@@ -1,21 +1,49 @@
 import { google } from "googleapis";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { getValidAccessToken } from "@/lib/googleTokenManager";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const token = url.searchParams.get("token");
   const dateParam = url.searchParams.get("date");
   const shift = url.searchParams.get("shift") || "day";
 
-  if (!token || !dateParam)
+  if (!dateParam) {
     return NextResponse.json(
-      { error: "Missing token or date" },
+      { error: "Missing date parameter" },
       { status: 400 }
     );
+  }
 
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: token });
-  const sheets = google.sheets({ version: "v4", auth });
+  // ✅ ตรวจสอบ session
+  const session = await getServerSession();
+  if (!session?.user?.email) {
+    return NextResponse.json(
+      { error: "Not authenticated", needAuth: true },
+      { status: 401 }
+    );
+  }
+
+  try {
+    // ✅ หา userId และดึง valid token
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const accessToken = await getValidAccessToken(user.id);
+
+    const auth = new google.auth.OAuth2();
+    auth.setCredentials({ access_token: accessToken });
+    const sheets = google.sheets({ version: "v4", auth });
 
   // ✅ เริ่มที่ B9 (ข้อมูลจริง)
   const res = await sheets.spreadsheets.values.get({
@@ -121,12 +149,32 @@ export async function GET(req: Request) {
     cause: r[13],
   }));
 
-  console.log("✅ Problems found:", problems.length);
+    console.log("✅ Problems found:", problems.length);
 
-  return NextResponse.json({
-    date: dateParam,
-    shift,
-    records: problems.length,
-    problems,
-  });
+    return NextResponse.json({
+      date: dateParam,
+      shift,
+      records: problems.length,
+      problems,
+    });
+  } catch (error) {
+    console.error("❌ Google Problem API error:", error);
+
+    // ถ้า error เกี่ยวกับ token
+    if (
+      error instanceof Error &&
+      (error.message.includes("authenticate") ||
+        error.message.includes("invalid_grant"))
+    ) {
+      return NextResponse.json(
+        { error: "Google authentication required", needAuth: true },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to fetch problem data" },
+      { status: 500 }
+    );
+  }
 }
