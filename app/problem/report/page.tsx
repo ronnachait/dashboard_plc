@@ -7,13 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { motion, AnimatePresence, Reorder } from "framer-motion";
-import { Loader2, Upload, X, MoveVertical, ZoomIn, ZoomOut, Image as ImageIcon } from "lucide-react";
+import { motion, Reorder } from "framer-motion";
+import { Loader2, Upload, X, MoveVertical, ZoomIn, ZoomOut, Image as ImageIcon, Video } from "lucide-react";
 import Image from "next/image";
+
+// Helper function to check if file is video
+const isVideoFile = (file: File) => file.type.startsWith('video/');
+
 export default function ProblemFormPage() {
   const [hasGoogleAuth, setHasGoogleAuth] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [images, setImages] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>([]); // เปลี่ยนจาก images เป็น files
   const [userEmail, setUserEmail] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [vehicleHour, setVehicleHour] = useState<number>(0);
@@ -33,7 +37,7 @@ export default function ProblemFormPage() {
           if (userinfoRes.ok) {
             const data = await userinfoRes.json();
             if (data.email) setUserEmail(data.email);
-          }
+    }
         } else {
           setHasGoogleAuth(false);
         }
@@ -57,7 +61,7 @@ export default function ProblemFormPage() {
         }
       } catch (err) {
         console.error("❌ Failed to fetch vehicle hour:", err);
-      }
+    }
     };
     fetchVehicleHour();
   }, []);
@@ -69,27 +73,29 @@ export default function ProblemFormPage() {
     )}`;
   };
 
-  // 🏷️ Helper: ระบุ label ของแต่ละรูป
-  const getImageLabel = (index: number) => {
+  // 🏷️ Helper: ระบุ label ของแต่ละไฟล์
+  const getFileLabel = (index: number, file: File) => {
+    const isVideo = isVideoFile(file);
     if (index === 0) return { label: "Zoom In", icon: ZoomIn, color: "text-blue-600 bg-blue-50 border-blue-300" };
     if (index === 1) return { label: "Zoom Out", icon: ZoomOut, color: "text-green-600 bg-green-50 border-green-300" };
+    if (isVideo) return { label: `Video ${index - 1}`, icon: Video, color: "text-purple-600 bg-purple-50 border-purple-300" };
     return { label: `Other ${index - 1}`, icon: ImageIcon, color: "text-gray-600 bg-gray-50 border-gray-300" };
   };
 
-  // 🔄 ย้ายรูปขึ้น
-  const moveImageUp = (index: number) => {
+  // 🔄 ย้ายไฟล์ขึ้น
+  const moveFileUp = (index: number) => {
     if (index === 0) return;
-    const newImages = [...images];
-    [newImages[index - 1], newImages[index]] = [newImages[index], newImages[index - 1]];
-    setImages(newImages);
+    const newFiles = [...files];
+    [newFiles[index - 1], newFiles[index]] = [newFiles[index], newFiles[index - 1]];
+    setFiles(newFiles);
   };
 
-  // 🔄 ย้ายรูปลง
-  const moveImageDown = (index: number) => {
-    if (index === images.length - 1) return;
-    const newImages = [...images];
-    [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
-    setImages(newImages);
+  // 🔄 ย้ายไฟล์ลง
+  const moveFileDown = (index: number) => {
+    if (index === files.length - 1) return;
+    const newFiles = [...files];
+    [newFiles[index], newFiles[index + 1]] = [newFiles[index + 1], newFiles[index]];
+    setFiles(newFiles);
   };
 
   // 🎯 ป้องกันการเปิดรูปเมื่อลากเข้าหน้า
@@ -117,9 +123,13 @@ export default function ProblemFormPage() {
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        setImages((prev) => [...prev, ...Array.from(files)]);
+      const droppedFiles = e.dataTransfer?.files;
+      if (droppedFiles && droppedFiles.length > 0) {
+        // กรองเฉพาะไฟล์รูป/วิดีโอ
+        const validFiles = Array.from(droppedFiles).filter(file => 
+          file.type.startsWith('image/') || file.type.startsWith('video/')
+        );
+        setFiles((prev) => [...prev, ...validFiles]);
       }
 
       dropZone.classList.remove("border-sky-500", "bg-sky-50");
@@ -156,7 +166,7 @@ export default function ProblemFormPage() {
 
     const formData = new FormData(e.currentTarget);
     // ไม่ต้องส่ง token แล้ว - server จะดึงเอง
-    images.forEach((file, i) => formData.append(`file_${i + 1}`, file));
+    files.forEach((file, i) => formData.append(`file_${i + 1}`, file));
 
     try {
       setUploadProgress(30); // กำลังส่งข้อมูล
@@ -186,7 +196,7 @@ export default function ProblemFormPage() {
         toast.success("✅ บันทึกข้อมูลเรียบร้อย!");
         
         // ล้างข้อมูลทั้งหมด
-        setImages([]);
+        setFiles([]);
         
         // รีเซ็ตฟอร์ม (ใช้ formRef แทน)
         if (formRef.current) {
@@ -222,16 +232,16 @@ export default function ProblemFormPage() {
         <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-200 text-center max-w-md animate-scale-in">
           <h1 className="text-3xl mb-4 font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
             🔐 Problem Report
-          </h1>
+        </h1>
           <p className="text-gray-600 mb-6">
             ต้องเชื่อมต่อกับ Google Account เพื่อบันทึกข้อมูลไปยัง Google Sheet
-          </p>
-          <Button
-            onClick={handleAuthorize}
+        </p>
+        <Button
+          onClick={handleAuthorize}
             className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
-          >
+        >
             🔗 Connect Google Account
-          </Button>
+        </Button>
         </div>
       </div>
     );
@@ -275,7 +285,7 @@ export default function ProblemFormPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label>Reported By</Label>
+              <Label>Reported By</Label>
                   <Input name="report_by" value={userEmail} readOnly className="bg-gray-100" />
                 </div>
 
@@ -305,8 +315,8 @@ export default function ProblemFormPage() {
                     Section
                   </Label>
                   <select
-                    name="dept"
-                    required
+                name="dept"
+                required
                     className="border border-gray-300 rounded-lg px-4 py-2.5 w-full focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all bg-white hover:border-sky-400 cursor-pointer"
                   >
                     <option value="">เลือก...</option>
@@ -349,7 +359,7 @@ export default function ProblemFormPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label>Part No.</Label>
+              <Label>Part No.</Label>
                   <Input 
                     name="part_num" 
                     placeholder="5T2166102W" 
@@ -358,7 +368,7 @@ export default function ProblemFormPage() {
                 </div>
 
                 <div>
-                  <Label>Part Name</Label>
+              <Label>Part Name</Label>
                   <Input 
                     name="part_name" 
                     placeholder="CASE(UPPER,BLOWER)" 
@@ -401,22 +411,22 @@ export default function ProblemFormPage() {
 
                 <div>
                   <Label>Classification</Label>
-                  <select
+              <select
                     name="Classification"
                     className="border border-gray-300 rounded-lg px-4 py-2.5 w-full focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all bg-white hover:border-sky-400 cursor-pointer"
-                  >
+              >
                     <option value="">เลือก...</option>
-                    <option value="Drawing error / แบบผิด">Drawing error</option>
-                    <option value="Wrong part list / พาทลิสผิด">Wrong part list</option>
-                    <option value="Part error / ชิ้นส่วนมีปัญหา">Part error</option>
-                    <option value="Part not enough / ชิ้นส่วนไม่ครบ">Part not enough</option>
-                    <option value="Improve workability / เพิ่มความสามารถในการทำงาน">Improve workability</option>
-                    <option value="Improve Quality / เพิ่มคุณภาพ">Improve Quality</option>
-                    <option value="Improve safety / เพิ่มความปลอดภัย">Improve safety</option>
-                    <option value="Cost dawn / ลดต้นทุน">Cost dawn</option>
-                    <option value="Etc / อื่นๆ">Etc</option>
-                  </select>
-                </div>
+                    <option value="Drawing error / แบบผิด">Drawing error / แบบผิด</option>
+                    <option value="Wrong part list / พาทลิสผิด">Wrong part list / พาทลิสผิด</option>
+                    <option value="Part error / ชิ้นส่วนมีปัญหา">Part error / ชิ้นส่วนมีปัญหา</option>
+                    <option value="Part not enough / ชิ้นส่วนไม่ครบ">Part not enough / ชิ้นส่วนไม่ครบ</option>
+                    <option value="Improve workability / เพิ่มความสามารถในการทำงาน">Improve workability / เพิ่มความสามารถในการทำงาน</option>
+                    <option value="Improve Quality / เพิ่มคุณภาพ">Improve Quality / เพิ่มคุณภาพ</option>
+                    <option value="Improve safety / เพิ่มความปลอดภัย">Improve safety / เพิ่มความปลอดภัย</option>
+                    <option value="Cost down / ลดต้นทุน">Cost down / ลดต้นทุน</option>
+                    <option value="Etc / อื่นๆ">Etc / อื่นๆ</option>
+              </select>
+            </div>
 
                 <div className="md:col-span-2">
                   <Label className="flex items-center gap-2">
@@ -429,12 +439,12 @@ export default function ProblemFormPage() {
                     className="border border-gray-300 rounded-lg px-4 py-2.5 w-full focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all bg-white hover:border-sky-400 cursor-pointer"
                   >
                     <option value="">เลือกสถานะ...</option>
-                    <option value="Done/Change part เปลี่ยนพาทใหม่">✅ Done/Change part</option>
-                    <option value="Done/Modify part แก้ไขพาทเดิม">✅ Done/Modify part</option>
-                    <option value="Done แก้ไขแล้ว">✅ Done</option>
-                    <option value="Waiting part รอพาร์ทจัดส่ง">⏳ Waiting part</option>
-                    <option value="Under checking อยู่ระหว่างการตรวจสอบ">🔍 Under checking</option>
-                    <option value="Monitoring เฝ้าสังเกต">👁️ Monitoring</option>
+                    <option value="Done/Change part เปลี่ยนพาทใหม่">✅ Done/Change part (เปลี่ยนพาทใหม่)</option>
+                    <option value="Done/Modify part แก้ไขพาทเดิม">✅ Done/Modify part (แก้ไขพาทเดิม)</option>
+                    <option value="Done แก้ไขแล้ว">✅ Done (แก้ไขแล้ว)</option>
+                    <option value="Waiting part รอพาร์ทจัดส่ง">⏳ Waiting part (รอพาร์ทจัดส่ง)</option>
+                    <option value="Under checking อยู่ระหว่างการตรวจสอบ">🔍 Under checking (อยู่ระหว่างการตรวจสอบ)</option>
+                    <option value="Monitoring เฝ้าสังเกต">👁️ Monitoring (เฝ้าสังเกต)</option>
                   </select>
                 </div>
               </div>
@@ -448,14 +458,14 @@ export default function ProblemFormPage() {
                 </svg>
                 <span className="text-sky-600">รายละเอียดปัญหา</span>
               </h3>
-              <div className="space-y-4">
+            <div className="space-y-4">
                 <div>
                   <Label className="flex items-center gap-2">
                     <span className="text-red-600">*</span>
                     Problem Detail (TH)
                   </Label>
-                  <Textarea
-                    name="Problems"
+              <Textarea
+                name="Problems"
                     placeholder="ระบุรายละเอียดปัญหา เช่น Stopper blower ฝั่ง LH เริ่มงอ..."
                     className="h-32 resize-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                     required
@@ -467,24 +477,24 @@ export default function ProblemFormPage() {
                     <span className="text-red-600">*</span>
                     Cause of Problem (TH)
                   </Label>
-                  <Textarea
-                    name="cause"
+              <Textarea
+                name="cause"
                     placeholder="ระบุสาเหตุ เช่น แรงลมตีกระแทกด้านเดียว..."
                     className="h-32 resize-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                    required
-                  />
+                required
+              />
                 </div>
               </div>
             </div>
 
-            {/* SECTION 4: Image Upload */}
+            {/* SECTION 4: Media Upload */}
             <div className="border-l-4 border-sky-500 pl-4 py-2">
               <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <svg className="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span className="text-sky-600">รูปภาพประกอบ</span>
-                <span className="text-xs text-gray-500 font-normal">(สูงสุด 5 รูป)</span>
+                <span className="text-sky-600">รูปภาพ / วิดีโอประกอบ</span>
+                <span className="text-xs text-gray-500 font-normal">(สูงสุด 5 ไฟล์)</span>
               </h3>
               <div className="space-y-4">
               <div
@@ -500,19 +510,22 @@ export default function ProblemFormPage() {
               >
                 <Upload className="mx-auto text-gray-400 group-hover:text-sky-500 mb-3 transition-colors w-8 h-8" />
                 <p className="text-gray-600 font-medium mb-1">
-                  คลิกเพื่อเลือกไฟล์
+                  คลิกเพื่อเลือกรูปภาพหรือวิดีโอ
                 </p>
                 <p className="text-gray-400 text-xs">
-                  หรือลากไฟล์มาวางที่นี่
+                  หรือลากไฟล์มาวางที่นี่ (รองรับ JPG, PNG, MP4, MOV)
                 </p>
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,video/*"
                   onChange={(e) => {
                     if (e.target.files) {
-                      setImages([...images, ...Array.from(e.target.files)]);
+                      const validFiles = Array.from(e.target.files).filter(file => 
+                        file.type.startsWith('image/') || file.type.startsWith('video/')
+                      );
+                      setFiles([...files, ...validFiles]);
                       // Reset input เพื่อให้เลือกไฟล์เดิมได้อีก
                       e.target.value = '';
                     }
@@ -522,57 +535,74 @@ export default function ProblemFormPage() {
               </div>
 
               {/* Preview Zone */}
-              {images.length > 0 && (
+              {files.length > 0 && (
                 <div>
                   <p className="text-xs text-gray-500 mb-2">
-                    💡 คลิกลากเพื่อเรียงลำดับรูป หรือใช้ปุ่มลูกศร
+                    💡 คลิกลากเพื่อเรียงลำดับไฟล์ หรือใช้ปุ่มลูกศร
                   </p>
                   <Reorder.Group
                     axis="x"
-                    values={images}
-                    onReorder={setImages}
+                    values={files}
+                    onReorder={setFiles}
                     className="flex flex-wrap gap-3"
                   >
-                    {images.map((file, i) => {
-                      const { label, icon: Icon, color } = getImageLabel(i);
+                    {files.map((file, i) => {
+                      const { label, icon: Icon, color } = getFileLabel(i, file);
+                      const isVideo = isVideoFile(file);
+                      const fileUrl = URL.createObjectURL(file);
+                      
                       return (
                         <Reorder.Item
                           key={file.name + i}
                           value={file}
                           className="relative"
                         >
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
                             className="relative w-32 h-32 border-2 rounded-xl overflow-hidden group shadow-md hover:shadow-lg transition-all cursor-move"
-                          >
+                    >
                             {/* Label Badge */}
                             <div className={`absolute top-2 left-2 px-2 py-1 rounded-md border text-xs font-medium flex items-center gap-1 shadow-sm z-10 ${color}`}>
                               <Icon size={12} />
                               <span>{label}</span>
                             </div>
 
-                            {/* Image */}
-                            <Image
-                              src={URL.createObjectURL(file)}
-                              alt={file.name}
-                              fill
-                              className="object-cover group-hover:opacity-90 transition"
-                            />
+                            {/* Image or Video Preview */}
+                            {isVideo ? (
+                              <video
+                                src={fileUrl}
+                                className="w-full h-full object-cover group-hover:opacity-90 transition"
+                                muted
+                                loop
+                                onMouseEnter={(e) => e.currentTarget.play()}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.pause();
+                                  e.currentTarget.currentTime = 0;
+                                }}
+                              />
+                            ) : (
+                      <Image
+                                src={fileUrl}
+                        alt={file.name}
+                        fill
+                                className="object-cover group-hover:opacity-90 transition"
+                      />
+                            )}
 
                             {/* Overlay Controls */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                               {/* Delete Button */}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setImages((prev) =>
-                                    prev.filter((_, idx) => idx !== i)
-                                  )
-                                }
+                      <button
+                        type="button"
+                        onClick={() =>
+                                  setFiles((prev) =>
+                            prev.filter((_, idx) => idx !== i)
+                          )
+                        }
                                 className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all"
-                                title="ลบรูป"
+                                title="ลบไฟล์"
                               >
                                 <X size={14} />
                               </button>
@@ -584,22 +614,22 @@ export default function ProblemFormPage() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      moveImageUp(i);
+                                      moveFileUp(i);
                                     }}
                                     className="bg-white/90 hover:bg-white text-gray-700 rounded-md p-1.5 shadow-md transition-all"
                                     title="ย้ายไปซ้าย"
-                                  >
+                      >
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <polyline points="15 18 9 12 15 6"></polyline>
                                     </svg>
                                   </button>
                                 )}
-                                {i < images.length - 1 && (
+                                {i < files.length - 1 && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      moveImageDown(i);
+                                      moveFileDown(i);
                                     }}
                                     className="bg-white/90 hover:bg-white text-gray-700 rounded-md p-1.5 shadow-md transition-all"
                                     title="ย้ายไปขวา"
@@ -607,10 +637,10 @@ export default function ProblemFormPage() {
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <polyline points="9 18 15 12 9 6"></polyline>
                                     </svg>
-                                  </button>
+                      </button>
                                 )}
                               </div>
-                            </div>
+              </div>
 
                             {/* Drag Handle Indicator */}
                             <div className="absolute bottom-2 left-2 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -634,40 +664,40 @@ export default function ProblemFormPage() {
                       <span className="text-sky-600 font-bold">{uploadProgress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
-                      <div
+                  <div
                         className={`h-3 rounded-full transition-all duration-500 ${
                           uploadProgress === 100 
                             ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
                             : 'bg-gradient-to-r from-sky-500 to-blue-500'
                         }`}
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
                     </div>
-                  </div>
-                )}
+                </div>
+              )}
               </div>
             </div>
 
             {/* Submit Button */}
-            <Button
-              type="submit"
-              disabled={loading}
+              <Button
+                type="submit"
+                disabled={loading}
               className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white py-4 text-lg shadow-lg hover:shadow-xl transition-all font-semibold transform hover:scale-[1.02] disabled:opacity-50"
-            >
-              {loading ? (
-                <>
+              >
+                {loading ? (
+                  <>
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  กำลังบันทึก...
-                </>
-              ) : (
+                    กำลังบันทึก...
+                  </>
+                ) : (
                 <>
                   <svg className="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   💾 บันทึกข้อมูล
                 </>
-              )}
-            </Button>
+                )}
+              </Button>
           </form>
         </CardContent>
       </Card>

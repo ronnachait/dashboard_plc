@@ -21,9 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { UploadCloud, Database, History } from "lucide-react";
+import { UploadCloud, Database, History, RefreshCw, FileText } from "lucide-react";
 import SensorHistoryTable from "./SensorHistoryTable";
 import { Progress } from "@/components/ui/progress"; // ✅ ต้องมี Progress component จาก shadcn
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 
 type SensorSummary = {
   sensor: string;
@@ -46,6 +55,11 @@ export default function SensorSummaryPage() {
   const [records, setRecords] = useState<SensorRecord[]>([]);
   const [activeTab, setActiveTab] = useState("history");
   const [progress, setProgress] = useState<number>(0);
+  const [dragActive, setDragActive] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedSensor, setSelectedSensor] = useState<SensorSummary | null>(null);
+  const [suggestedHour, setSuggestedHour] = useState<string>("");
+  const [remark, setRemark] = useState<string>("");
 
   const [meta, setMeta] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -160,6 +174,13 @@ export default function SensorSummaryPage() {
     });
   };
 
+  const resetImport = () => {
+    setSummary([]);
+    setFileName(null);
+    setProgress(0);
+    setSelectedSensor(null);
+  };
+
   // 💾 Save to DB
   const saveToDB = async () => {
     const exists = records.some(
@@ -180,7 +201,7 @@ export default function SensorSummaryPage() {
     const res = await fetch("/api/sensor/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...meta, summaries }),
+      body: JSON.stringify({ ...meta, remark, fileName, sensorCount: summary.length, summaries }),
     });
 
     if (res.ok) {
@@ -198,7 +219,16 @@ export default function SensorSummaryPage() {
   const fetchHistory = async () => {
     const res = await fetch("/api/sensor/import");
     const data = await res.json();
-    setRecords(data.records ?? []);
+    const recs: SensorRecord[] = data.records ?? [];
+    setRecords(recs);
+    if (recs.length > 0) {
+      const sorted = [...recs].sort((a,b)=> new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latest = sorted[0];
+      setSuggestedHour(latest.hourMeter || "");
+      if (!meta.hourMeter) {
+        setMeta((m)=> ({...m, hourMeter: latest.hourMeter || ""}));
+      }
+    }
   };
 
   useEffect(() => {
@@ -207,13 +237,16 @@ export default function SensorSummaryPage() {
 
   return (
     <div className="p-6 space-y-6 mx-auto">
-      <div className="flex items-center gap-2 mb-4">
-        <History className="text-blue-600 w-6 h-6" />
-        <h1 className="text-2xl font-bold text-blue-700">Sensor Dashboard</h1>
+      <div className="text-center mb-4">
+        <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl shadow-lg">
+          <History className="text-white w-7 h-7" />
+        </div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mt-3">Temperature / Pressure Analyzer</h1>
+        <p className="text-gray-500 text-sm">อัปโหลดไฟล์ CSV เพื่อคำนวณค่า Min / Avg / Max ของแต่ละเซนเซอร์</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-blue-50 rounded-lg p-1 mb-4">
+        <TabsList className="bg-blue-50 rounded-lg p-1 mb-4 sticky top-0 z-10">
           <TabsTrigger
             value="history"
             className="data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-md px-4 py-1"
@@ -268,27 +301,57 @@ export default function SensorSummaryPage() {
                 <label className="text-sm font-medium text-gray-600">
                   ชั่วโมงเครื่อง (Hour Meter)
                 </label>
-                <Input
-                  placeholder="เช่น 1160.9"
-                  value={meta.hourMeter}
-                  onChange={(e) =>
-                    setMeta({ ...meta, hourMeter: e.target.value })
-                  }
-                />
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={suggestedHour ? `เช่น ${suggestedHour}` : "เช่น 1160.9"}
+                    value={meta.hourMeter}
+                    onChange={(e) =>
+                      setMeta({ ...meta, hourMeter: e.target.value })
+                    }
+                  />
+                  <Button variant="outline" onClick={()=> setMeta(m=> ({...m, hourMeter: suggestedHour}))} disabled={!suggestedHour}>
+                    ดึงอัตโนมัติ
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <label
-              htmlFor="csvFile"
-              className="border-2 border-dashed border-blue-400 rounded-xl flex flex-col items-center justify-center py-10 cursor-pointer hover:bg-blue-50 transition"
+            <div>
+              <label className="text-sm font-medium text-gray-600">หมายเหตุ</label>
+              <Input
+                placeholder="บันทึกรายละเอียดเพิ่มเติม เช่น ไฟล์รุ่น / เครื่อง / ผู้บันทึก"
+                value={remark}
+                onChange={(e)=> setRemark(e.target.value)}
+              />
+            </div>
+
+            <div
+              onDragOver={(e)=>{e.preventDefault(); setDragActive(true);}}
+              onDragLeave={()=>setDragActive(false)}
+              onDrop={(e)=>{
+                e.preventDefault();
+                setDragActive(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) {
+                  const input = document.getElementById("csvFile") as HTMLInputElement | null;
+                  if (input) {
+                    const dt = new DataTransfer();
+                    dt.items.add(f);
+                    input.files = dt.files;
+                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                  }
+                }
+              }}
+              className={`border-2 border-dashed ${dragActive?"border-sky-500 bg-sky-50":"border-blue-400"} rounded-xl flex flex-col items-center justify-center py-10 cursor-pointer hover:bg-blue-50 transition`}
             >
-              <UploadCloud className="w-8 h-8 text-blue-500 mb-2" />
-              <span className="text-gray-600 text-sm">
-                {fileName
-                  ? fileName
-                  : "ลากไฟล์ .CSV มาวาง หรือคลิกเพื่อเลือกไฟล์"}
-              </span>
-            </label>
+              <label htmlFor="csvFile" className="flex flex-col items-center">
+                <UploadCloud className="w-8 h-8 text-blue-500 mb-2" />
+                <span className="text-gray-600 text-sm">
+                  {fileName ? fileName : "ลากไฟล์ .CSV มาวาง หรือคลิกเพื่อเลือกไฟล์"}
+                </span>
+                <span className="text-xs text-gray-400 mt-1">รองรับไฟล์ .csv ขนาดไม่เกิน ~50MB</span>
+              </label>
+            </div>
             <Input
               id="csvFile"
               type="file"
@@ -308,9 +371,64 @@ export default function SensorSummaryPage() {
 
             {summary.length > 0 && (
               <>
-                <div className="overflow-auto max-h-[400px] mt-4 rounded-lg border">
+                <div className="flex items-center justify-between gap-3 mt-2">
+                  <div className="text-sm text-gray-600 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    พบทั้งหมด <span className="font-semibold text-blue-700">{summary.length}</span> sensors
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="ค้นหา sensor..." value={search} onChange={(e)=>setSearch(e.target.value)} className="h-9 w-56" />
+                    <Button variant="outline" className="h-9" onClick={resetImport}>
+                      <RefreshCw className="w-4 h-4 mr-1" /> รีเซ็ต
+                    </Button>
+                    <Button variant="outline" className="h-9" onClick={()=>{
+                      const header = ["sensor","min","avg","max"];
+                      const rows = summary
+                        .filter(s=> s.sensor.toLowerCase().includes(search.toLowerCase()))
+                        .map(s=>[s.sensor, s.min, s.avg, s.max]);
+                      const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `sensor-summary-${meta.date}-${meta.shift}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}>
+                      ดาวน์โหลด CSV
+                    </Button>
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white h-9" onClick={saveToDB}>
+                      <Database className="w-4 h-4 mr-1" /> บันทึกลงฐานข้อมูล
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Preview mini chart */}
+                {selectedSensor && (
+                  <Card className="mt-3 p-4 border-blue-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-gray-700">
+                        แสดงผล: <span className="font-semibold text-blue-700">{selectedSensor.sensor}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">คลิกแถวอื่นเพื่อเปลี่ยน</div>
+                    </div>
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={[{ name: "Min", value: Number(selectedSensor.min) }, { name: "Avg", value: Number(selectedSensor.avg) }, { name: "Max", value: Number(selectedSensor.max) }] }>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#3b82f6" radius={[6,6,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                )}
+
+                <div className="overflow-auto max-h-[420px] mt-3 rounded-lg border">
                   <Table className="min-w-full text-xs">
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 z-10">
                       <TableRow className="bg-blue-100/80">
                         <TableCell className="font-semibold text-gray-700">
                           Sensor
@@ -327,10 +445,13 @@ export default function SensorSummaryPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {summary.map((s, i) => (
+                      {summary
+                        .filter(s=> s.sensor.toLowerCase().includes(search.toLowerCase()))
+                        .map((s, i) => (
                         <TableRow
                           key={i}
-                          className="hover:bg-blue-50 transition"
+                           onClick={()=> setSelectedSensor(s)}
+                           className={`hover:bg-blue-50 transition cursor-pointer ${selectedSensor?.sensor===s.sensor?"bg-blue-50": ""}`}
                         >
                           <TableCell>{s.sensor}</TableCell>
                           <TableCell className="text-right">{s.min}</TableCell>
@@ -341,16 +462,15 @@ export default function SensorSummaryPage() {
                     </TableBody>
                   </Table>
                 </div>
-
-                <div className="flex justify-end mt-4">
-                  <Button
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={saveToDB}
-                  >
-                    <Database className="w-4 h-4 mr-1" /> บันทึกลงฐานข้อมูล
-                  </Button>
-                </div>
               </>
+            )}
+
+            {summary.length === 0 && (
+              <div className="text-center py-14 text-gray-500 border rounded-xl">
+                <UploadCloud className="w-10 h-10 mx-auto text-blue-400 mb-2" />
+                <div className="font-medium">ยังไม่มีข้อมูลสรุป</div>
+                <div className="text-sm">อัปโหลดไฟล์ .CSV เพื่อเริ่มประมวลผล</div>
+              </div>
             )}
           </Card>
         </TabsContent>

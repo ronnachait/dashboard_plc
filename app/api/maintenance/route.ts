@@ -2,9 +2,13 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const vehicleId = searchParams.get("vehicleId") || undefined;
   const plans = await prisma.maintenancePlan.findMany({
+    where: vehicleId ? { vehicleId } : undefined,
     include: { template: true, vehicle: true },
+    orderBy: { nextDueHour: "asc" },
   });
 
   const updates = await Promise.all(

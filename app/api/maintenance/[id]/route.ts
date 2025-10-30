@@ -59,7 +59,24 @@ export async function PATCH(
 ) {
   try {
     const body = await req.json();
-    const { category, item, action, intervalHr } = body;
+    const { category, item, action, intervalHr, lastDoneHour, nextDueHour } = body;
+
+    // load current plan to compute derived nextDueHour when needed
+    const current = await prisma.maintenancePlan.findUnique({
+      where: { id: params.id },
+      include: { template: true },
+    });
+    if (!current) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+
+    const interval =
+      typeof intervalHr === "number" && !isNaN(intervalHr)
+        ? intervalHr
+        : current.template?.intervalHr ?? 0;
+    const last =
+      typeof lastDoneHour === "number" && !isNaN(lastDoneHour)
+        ? lastDoneHour
+        : current.lastDoneHour ?? 0;
+    const computedNext = last + interval;
 
     const updated = await prisma.maintenancePlan.update({
       where: { id: params.id },
@@ -69,9 +86,15 @@ export async function PATCH(
             category,
             item,
             action,
-            intervalHr: Number(intervalHr),
+            intervalHr: Number(intervalHr ?? current.template?.intervalHr ?? 0),
           },
         },
+        lastDoneHour: Number(last),
+        nextDueHour: Number(
+          typeof nextDueHour === "number" && !isNaN(nextDueHour)
+            ? nextDueHour
+            : computedNext
+        ),
       },
       include: { template: true },
     });

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     const problemFolderId = folder.data.id!;
     console.log("📁 Created folder:", problemFolderId);
 
-    // ✅ อัปโหลดรูป
+    // ✅ อัปโหลดไฟล์ (รูปภาพและวิดีโอ)
     const uploadedFiles: string[] = [];
 
     for (const [key, value] of formData.entries()) {
@@ -81,9 +81,14 @@ export async function POST(req: Request) {
         const fileId = res.data.id ?? "";
         const link = res.data.webViewLink ?? "";
 
-        // ✅ ฝังสูตร HYPERLINK + image ที่ใช้ ID จริง
+        // ✅ ตรวจสอบว่าเป็นวิดีโอหรือรูป
+        const isVideo = value.type.startsWith('video/');
+        
+        // ✅ ฝังสูตร - วิดีโอใช้ HYPERLINK อย่างเดียว, รูปใช้ image() + HYPERLINK
         const formula = fileId
-          ? `=HYPERLINK("${link}", image("https://lh3.google.com/u/0/d/${fileId}", 4, 100, 100))`
+          ? isVideo
+            ? `=HYPERLINK("${link}", "🎬 ${value.name}")`
+            : `=HYPERLINK("${link}", image("https://lh3.google.com/u/0/d/${fileId}", 4, 100, 100))`
           : "No File";
 
         uploadedFiles.push(formula);
@@ -91,11 +96,15 @@ export async function POST(req: Request) {
     }
 
     // ✅ เขียนชีต
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US"); // MM/DD/YYYY (ค.ศ.)
+    const timeStr = now.toLocaleTimeString("en-US", { hour12: false }); // HH:MM:SS (24hr)
+    
     const values = [
       [
         "",
-        new Date().toLocaleDateString("th-TH"),
-        new Date().toLocaleTimeString("th-TH"),
+        dateStr,
+        timeStr,
         formData.get("hour_M_C"),
         formData.get("report_by"),
         formData.get("dept"),

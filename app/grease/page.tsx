@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,10 +9,10 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
-  Pencil,
   Download,
 } from "lucide-react";
 import Image from "next/image";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -56,11 +56,14 @@ const formatDate = (date?: Date | string | null) => {
   });
 };
 
-export default function GreasePage() {
+function GreasePageInner() {
   const [points, setPoints] = useState<GreasePoint[]>([]);
   const [currentHour, setCurrentHour] = useState<number>(0);
   const [currentUpdate, setCurrentUpdate] = useState<Date | null | undefined>();
   const [filter, setFilter] = useState<"ALL" | "DUE" | "WARN" | "OK">("ALL");
+  // context menu state
+  const [ctxMenu, setCtxMenu] = useState<{ open: boolean; x: number; y: number; point: GreasePoint | null }>({ open: false, x: 0, y: 0, point: null });
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // modal states
   const [showForm, setShowForm] = useState(false);
@@ -75,7 +78,22 @@ export default function GreasePage() {
   const { data: session } = useSession();
   const role = session?.user?.role;
 
-  const isAdmin = role === "admin" || role === "cdhw-wfh8ogfup"; // ✅ เช็ค role
+  const isAdmin = role === "admin" || role === "dev" || role === "cdhw-wfh8ogfup"; // ✅ เช็ค role
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const selectedVehicleId = useMemo(() => searchParams.get("vehicleId"), [searchParams]);
+  const counts = useMemo(() => {
+    const base = points.filter(p => !selectedVehicleId || p.vehicleId === selectedVehicleId);
+    const calcKey = (p: GreasePoint) => (currentHour >= p.nextDueHour ? "DUE" : currentHour >= p.nextDueHour - 1 ? "WARN" : "OK");
+    return base.reduce(
+      (acc, p) => {
+        acc.ALL += 1;
+        acc[calcKey(p)] += 1;
+        return acc;
+      },
+      { ALL: 0, DUE: 0, WARN: 0, OK: 0 } as Record<"ALL"|"DUE"|"WARN"|"OK", number>
+    );
+  }, [points, selectedVehicleId, currentHour]);
   useEffect(() => {
     const fetchPoints = async () => {
       const res = await fetch("/api/grease");
@@ -92,7 +110,15 @@ export default function GreasePage() {
       const res = await fetch("/api/vehicle");
       if (res.ok) {
         const data = await res.json();
-        setVehicles(data.vehicles);
+        const sorted = [...data.vehicles].sort((a: {id:string; name:string; plateNo:string}, b: {id:string; name:string; plateNo:string}) => {
+          const sa = `${a.name ?? ""} ${a.plateNo ?? ""}`.toLowerCase();
+          const sb = `${b.name ?? ""} ${b.plateNo ?? ""}`.toLowerCase();
+          const pa = sa.includes("2.9") ? 0 : 1;
+          const pb = sb.includes("2.9") ? 0 : 1;
+          if (pa !== pb) return pa - pb;
+          return (a.name ?? "").localeCompare(b.name ?? "");
+        });
+        setVehicles(sorted);
       }
     };
     fetchVehicles();
@@ -100,9 +126,14 @@ export default function GreasePage() {
 
   useEffect(() => {
     const fetchVehicle = async () => {
-      const res = await fetch(
-        "/api/vehicle/23429582-fbfd-4c7b-95c1-10c17b3dfebb"
-      ); // fix id
+      const vid = selectedVehicleId || vehicles[0]?.id;
+      if (!selectedVehicleId && vid) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("vehicleId", vid);
+        router.replace(url.toString());
+      }
+      if (!vid) return;
+      const res = await fetch(`/api/vehicle/${vid}`);
       if (res.ok) {
         const data = await res.json();
         setCurrentHour(data.vehicle?.lastHourAfterTest ?? 0);
@@ -110,19 +141,85 @@ export default function GreasePage() {
       }
     };
     fetchVehicle();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicleId, vehicles]);
 
-  const handleGrease = async (pointId: string) => {
+  const refreshVehicleHour = async () => {
+    const vid = selectedVehicleId || vehicles[0]?.id;
+    if (!vid) return;
+    const res = await fetch(`/api/vehicle/${vid}`);
+    if (res.ok) {
+      const data = await res.json();
+      setCurrentHour(data.vehicle?.lastHourAfterTest ?? 0);
+      setCurrentUpdate(data.vehicle?.updatedAt ?? null);
+    }
+  };
+  // Auto refresh hour meter every 30s
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshVehicleHour().catch(() => {});
+    }, 30000);
+    return () => clearInterval(id);
+  }, [selectedVehicleId]);
+
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return; // close only on left-click
+      if (!ctxMenu.open) return;
+      const el = menuRef.current;
+      if (el && el.contains(e.target as Node)) return;
+      setCtxMenu((m) => ({ ...m, open: false }));
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCtxMenu((m) => ({ ...m, open: false }));
+    };
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [ctxMenu.open]);
+
+  const handleGrease = async (pointId: string, hour?: number) => {
     const res = await fetch("/api/grease/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pointId, currentHour }),
+      body: JSON.stringify({ pointId, currentHour: hour ?? currentHour }),
     });
 
     if (res.ok) {
       const { point } = await res.json();
       const updated = points.map((p) => (p.id === point.id ? point : p));
       setPoints(updated);
+    }
+  };
+
+  const handleGreaseBulk = async () => {
+    // choose targets: only DUE
+    const targets = filteredPoints.filter((p) => getStatus(p).key === "DUE");
+    if (targets.length === 0) {
+      alert("ไม่มีรายการ DUE/WARN ให้ทำรายการ");
+      return;
+    }
+    const hrStr = window.prompt(`ชั่วโมงที่อัดจริง (ใช้กับ ${targets.length} จุด)`, String(currentHour));
+    const hr = hrStr ? parseFloat(hrStr) : currentHour;
+    if (Number.isNaN(hr)) return;
+    const updates = await Promise.all(
+      targets.map((t) =>
+        fetch("/api/grease/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pointId: t.id, currentHour: hr }),
+        }).then((r) => (r.ok ? r.json() : null))
+      )
+    );
+    const updatedMap = new Map<string, GreasePoint>();
+    updates.forEach((u) => {
+      if (u && u.point) updatedMap.set(u.point.id, u.point as GreasePoint);
+    });
+    if (updatedMap.size > 0) {
+      setPoints((prev) => prev.map((p) => updatedMap.get(p.id) ?? p));
     }
   };
 
@@ -151,10 +248,39 @@ export default function GreasePage() {
     }
   };
 
-  const filteredPoints =
-    filter === "ALL"
-      ? points
-      : points.filter((p) => getStatus(p).key === filter);
+  const filteredPoints = (filter === "ALL" ? points : points.filter((p) => getStatus(p).key === filter))
+    .filter(p => !selectedVehicleId || p.vehicleId === selectedVehicleId)
+    .sort((a, b) => {
+      const rank = (p: GreasePoint) => (currentHour >= p.nextDueHour ? 0 : currentHour >= p.nextDueHour - 1 ? 1 : 2);
+      const r = rank(a) - rank(b);
+      if (r !== 0) return r;
+      const remA = a.nextDueHour - currentHour;
+      const remB = b.nextDueHour - currentHour;
+      return remA - remB;
+    });
+
+  const exportCsv = () => {
+    const header = ["pointNo","name","positions","fittings","intervalHours","lastGreaseHour","nextDueHour","status","vehicleId"];
+    const rows = filteredPoints.map(p => [
+      p.pointNo,
+      p.name,
+      p.positions ?? "",
+      p.fittings,
+      p.intervalHours,
+      p.lastGreaseHour,
+      p.nextDueHour,
+      getStatus(p).key,
+      p.vehicleId,
+    ]);
+    const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `grease-points.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const openAdd = () => {
     setEditPoint(null);
@@ -210,51 +336,77 @@ export default function GreasePage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
-      <Card className="shadow-lg rounded-xl">
+      <Card className="shadow-lg rounded-2xl">
         <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-800">
             <Wrench className="w-5 h-5 text-blue-600" />
             ตารางอัดจารบี
           </CardTitle>
-          {isAdmin && (
-            <Button onClick={openAdd} className="bg-blue-600 text-white">
-              <Plus className="w-4 h-4" /> เพิ่มจุดอัด
+          <div className="flex gap-2">
+            <select
+              className="border rounded-md px-3 py-1 text-sm bg-white/90 shadow-sm"
+              value={selectedVehicleId ?? ""}
+              onChange={(e)=>{
+                const url = new URL(window.location.href);
+                url.searchParams.set("vehicleId", e.target.value);
+                router.push(url.toString());
+              }}
+            >
+              {vehicles.map(v=> (
+                <option key={v.id} value={v.id}>{v.name}{v.plateNo?` (${v.plateNo})`:''}</option>
+              ))}
+            </select>
+            <Button variant="outline" onClick={exportCsv}>
+              <Download className="w-4 h-4 mr-1"/> Export CSV
             </Button>
-          )}
+            {isAdmin && (
+              <Button variant="outline" onClick={handleGreaseBulk} className="border-green-600 text-green-700 hover:bg-green-50">
+                ✅ All อัดแล้ว
+              </Button>
+            )}
+            {isAdmin && (
+              <Button onClick={openAdd} className="bg-blue-600 text-white">
+                <Plus className="w-4 h-4" /> เพิ่มจุดอัด
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* ชั่วโมงเครื่อง */}
-            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white border rounded-xl shadow-sm p-3">
-              <div className="flex items-center gap-2 text-gray-600">
-                <span className="font-semibold flex items-center gap-1">
-                  ⏱ ชั่วโมงเครื่อง
-                </span>
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white/90 backdrop-blur rounded-xl shadow-md ring-1 ring-slate-200 p-4 transition-all">
+              <div className="flex items-center gap-2 text-gray-700">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700">⏱</span>
+                <span className="font-semibold">ชั่วโมงเครื่อง</span>
               </div>
-              <div className="text-blue-600 font-bold text-lg bg-blue-50 px-4 py-1.5 rounded-lg">
+              <div className="px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-lg shadow">
                 {currentHour} ชม.
               </div>
             </div>
 
             {/* อัปเดตล่าสุด */}
-            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white border rounded-xl shadow-sm p-3">
-              <span className="font-semibold text-gray-600">
-                📅 อัปเดตล่าสุด
-              </span>
-              <span className="text-gray-800 font-medium">
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white/90 backdrop-blur rounded-xl shadow-md ring-1 ring-slate-200 p-4 transition-all">
+              <div className="flex items-center gap-2 text-gray-700">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 text-amber-700">📅</span>
+                <span className="font-semibold">อัปเดตล่าสุด</span>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-800 font-medium">
                 {formatDate(currentUpdate)}
               </span>
             </div>
 
             {/* Filter */}
-            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white border rounded-xl shadow-sm p-3">
-              <span className="font-semibold text-gray-600">🎯 สถานะ</span>
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-white/90 backdrop-blur rounded-xl shadow-md ring-1 ring-slate-200 p-4 transition-all">
+              <span className="font-semibold text-gray-700 flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-fuchsia-100 text-fuchsia-700">🎯</span>
+                สถานะ
+              </span>
               <select
                 value={filter}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   setFilter(e.target.value as "ALL" | "DUE" | "WARN" | "OK")
                 }
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium shadow-inner focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
               >
                 <option value="ALL">🌐 ทั้งหมด</option>
                 <option value="DUE">❌ เกินรอบ</option>
@@ -264,11 +416,21 @@ export default function GreasePage() {
             </div>
           </div>
 
+          {/* Summary chips */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="px-2.5 py-1 rounded-full text-xs bg-gray-100 text-gray-700">ทั้งหมด {counts.ALL}</span>
+            <span className="px-2.5 py-1 rounded-full text-xs bg-red-100 text-red-700">เกินรอบ {counts.DUE}</span>
+            <span className="px-2.5 py-1 rounded-full text-xs bg-yellow-100 text-yellow-700">ใกล้ถึง {counts.WARN}</span>
+            <span className="px-2.5 py-1 rounded-full text-xs bg-green-100 text-green-700">ปกติ {counts.OK}</span>
+          </div>
+
           {/* ✅ Table (PC) */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+          <div className="hidden sm:block">
+
+            <div className="overflow-x-auto rounded-xl border ">
+            <table className="min-w-full w-full text-sm">
               <thead>
-                <tr className="bg-gray-100 text-gray-700">
+                <tr className="bg-blue-50 text-gray-700 sticky top-0">
                   <th className="p-2">จุดที่</th>
                   <th className="p-2">ตำแหน่ง</th>
                   <th className="p-2">รูป</th>
@@ -276,13 +438,13 @@ export default function GreasePage() {
                   <th className="p-2">รอบ</th>
                   <th className="p-2">ล่าสุด</th>
                   <th className="p-2">ถึงรอบ</th>
+                  <th className="p-2">เหลือ</th>
                   <th className="p-2">สถานะ</th>
                   <th className="p-2">ความคืบหน้า</th>
                   <th className="p-2">รายละเอียด</th>
-                  <th className="p-2">Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-200">
                 {filteredPoints.map((p) => {
                   const { label, color, Icon, key } = getStatus(p);
                   const progress = Math.min(
@@ -292,20 +454,24 @@ export default function GreasePage() {
                   return (
                     <tr
                       key={p.id}
-                      className={`hover:bg-gray-50 ${
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCtxMenu({ open: true, x: e.clientX, y: e.clientY, point: p });
+                      }}
+                      className={`hover:bg-gray-50 transition-colors ${
                         key === "DUE"
-                          ? "bg-red-50"
+                          ? "bg-red-50 border-l-4 border-red-500"
                           : key === "WARN"
-                          ? "bg-yellow-50"
+                          ? "bg-yellow-50 border-l-4 border-yellow-500"
                           : ""
                       }`}
                     >
-                      <td className="p-2 text-center">{p.pointNo}</td>
-                      <td className="p-2">
+                      <td className="p-2 text-center font-mono text-sm">{p.pointNo}</td>
+                      <td className="p-2 max-w-[120px]">
                         <div>
-                          <div className="font-semibold">{p.name}</div>
+                          <div className="font-semibold text-sm truncate">{p.name}</div>
                           {p.positions && (
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-500 truncate">
                               {p.positions}
                             </div>
                           )}
@@ -316,8 +482,8 @@ export default function GreasePage() {
                           <Image
                             src={p.picture}
                             alt={p.name}
-                            width={56}
-                            height={56}
+                            width={40}
+                            height={40}
                             className="rounded object-cover cursor-pointer"
                             onClick={() => setPreview(p.picture!)} // 👈 เพิ่ม
                           />
@@ -325,19 +491,27 @@ export default function GreasePage() {
                           "-"
                         )}
                       </td>
-                      <td className="p-2">{p.fittings}</td>
-                      <td className="p-2">{p.intervalHours}</td>
-                      <td className="p-2">{p.lastGreaseHour}</td>
-                      <td className="p-2">{p.nextDueHour}</td>
+                      <td className="p-2 text-center font-mono text-sm">{p.fittings}</td>
+                      <td className="p-2 text-center font-mono text-sm">{p.intervalHours}</td>
+                      <td className="p-2 text-center font-mono text-sm">{p.lastGreaseHour}</td>
+                      <td className="p-2 text-center font-mono text-sm">{p.nextDueHour}</td>
+                      <td className="p-2">
+                        {(() => {
+                          const remain = p.nextDueHour - currentHour;
+                          const cls = remain <= 0 ? "text-red-600 font-semibold" : remain <= 1 ? "text-yellow-600 font-semibold" : "text-gray-700";
+                          const val = Math.max(0, remain).toFixed(2);
+                          return <span className={`${cls} text-center font-mono text-sm`}>{val}</span>;
+                        })()}
+                      </td>
                       <td className="p-2">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span
-                                className={`font-bold flex items-center gap-1 cursor-help ${color}`}
+                              <div className={`font-bold flex items-center gap-1 cursor-help ${color} max-w-[120px] whitespace-nowrap truncate`}
                               >
-                                <Icon className="w-4 h-4" /> {label}
-                              </span>
+                                <Icon className="w-4 h-4 min-w-4" />
+                                <span className="truncate">{label}</span>
+                              </div>
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>
@@ -365,9 +539,9 @@ export default function GreasePage() {
                             style={{ width: `${progress}%` }}
                           ></div>
                         </div>
-                        <span className="text-xs">{progress.toFixed(0)}%</span>
+                        <span className="text-xs font-mono text-gray-600">{progress.toFixed(0)}%</span>
                       </td>
-                      <td className="p-2 max-w-[200px] truncate">
+                      <td className="p-2 max-w-[150px] truncate">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -383,34 +557,67 @@ export default function GreasePage() {
                           </Tooltip>
                         </TooltipProvider>
                       </td>
-
-                      <td className="p-2 flex gap-1">
-                        <Button
-                          onClick={() => handleGrease(p.id)}
-                          disabled={key !== "DUE"}
-                          size="sm"
-                          className={`${
-                            key === "DUE"
-                              ? "bg-green-600 text-white"
-                              : "bg-gray-300 text-gray-500"
-                          }`}
-                        >
-                          ✅ อัดแล้ว
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => openEdit(p)}
-                          className="bg-yellow-500 text-white"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+          </div>
+
+          {ctxMenu.open && ctxMenu.point && (
+            <div
+              ref={menuRef}
+              className="fixed z-50 bg-white border rounded-md shadow-lg overflow-hidden"
+              style={{
+                left: typeof window !== "undefined" ? Math.min(ctxMenu.x + 2, window.innerWidth - 200) : ctxMenu.x + 2,
+                top: typeof window !== "undefined" ? Math.min(ctxMenu.y + 2, window.innerHeight - 140) : ctxMenu.y + 2,
+                minWidth: 180,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(() => {
+                const k = getStatus(ctxMenu.point!).key;
+                const disabled = k === "OK";
+                return (
+                  <button
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${disabled ? "text-gray-400 cursor-not-allowed" : "hover:bg-gray-100"}`}
+                    onClick={() => {
+                      if (disabled) return;
+                      const hrStr = window.prompt("ชั่วโมงที่อัดจริง", String(currentHour));
+                      const hr = hrStr ? parseFloat(hrStr) : currentHour;
+                      if (ctxMenu.point) handleGrease(ctxMenu.point.id, hr);
+                      setCtxMenu((m) => ({ ...m, open: false }));
+                    }}
+                  >
+                    <span>✅</span> <span>อัดแล้ว</span>
+                  </button>
+                );
+              })()}
+              {isAdmin && (
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                  onClick={() => {
+                    if (ctxMenu.point) openEdit(ctxMenu.point);
+                    setCtxMenu((m) => ({ ...m, open: false }));
+                  }}
+                >
+                  ✏️ แก้ไข
+                </button>
+              )}
+              {ctxMenu.point?.picture && (
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                  onClick={() => {
+                    if (ctxMenu.point?.picture) setPreview(ctxMenu.point.picture);
+                    setCtxMenu((m) => ({ ...m, open: false }));
+                  }}
+                >
+                  🖼️ ดูรูป
+                </button>
+              )}
+            </div>
+          )}
 
           {/* ✅ Mobile: Card */}
           <div className="sm:hidden space-y-3">
@@ -421,7 +628,7 @@ export default function GreasePage() {
                 ((currentHour - p.lastGreaseHour) / p.intervalHours) * 100
               );
               return (
-                <Card key={p.id} className="p-3 shadow-md">
+                <Card key={p.id} className="p-3 shadow-md rounded-2xl">
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-bold">{p.name}</div>
@@ -466,29 +673,7 @@ export default function GreasePage() {
                       style={{ width: `${progress}%` }}
                     ></div>
                   </div>
-                  <div className="flex gap-2 mt-3">
-                    <Button
-                      onClick={() => handleGrease(p.id)}
-                      disabled={key !== "DUE"}
-                      size="sm"
-                      className={`${
-                        key === "DUE"
-                          ? "bg-green-600 text-white"
-                          : "bg-gray-300 text-gray-500"
-                      }`}
-                    >
-                      ✅ อัดแล้ว
-                    </Button>
-                    {isAdmin && (
-                      <Button
-                        size="sm"
-                        onClick={() => openEdit(p)}
-                        className="bg-yellow-500 text-white"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
+                  {/* actions removed on mobile */}
                 </Card>
               );
             })}
@@ -752,5 +937,13 @@ export default function GreasePage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function GreasePage() {
+  return (
+    <Suspense fallback={<div className="p-6">กำลังโหลด...</div>}>
+      <GreasePageInner />
+    </Suspense>
   );
 }

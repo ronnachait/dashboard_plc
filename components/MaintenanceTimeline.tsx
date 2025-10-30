@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import {
 import { toast } from "sonner";
 import { MaintenanceLogModal } from "./MaintenanceLogs";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { FileDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +72,10 @@ export default function MaintenanceTimeline() {
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const selectedVehicleId = useMemo(() => searchParams.get("vehicleId"), [searchParams]);
 
   const [openAdd, setOpenAdd] = useState(false);
   const [newPlan, setNewPlan] = useState({
@@ -78,6 +84,7 @@ export default function MaintenanceTimeline() {
     action: "",
     intervalHr: "",
     lastDoneHour: "",
+    nextDueHour: "",
   });
   const [editPlan, setEditPlan] = useState<Plan | null>(null);
   const [editForm, setEditForm] = useState({
@@ -85,6 +92,8 @@ export default function MaintenanceTimeline() {
     item: "",
     action: "",
     intervalHr: "",
+    lastDoneHour: "",
+    nextDueHour: "",
   });
 
   // ✅ Filter & Search states
@@ -92,33 +101,52 @@ export default function MaintenanceTimeline() {
     "ALL" | "PENDING" | "OVERDUE" | "DONE"
   >("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dueWindow, setDueWindow] = useState<"ALL" | 24 | 48 | 100>("ALL");
 
-  // 📦 Fetch maintenance plans
+  // 📦 Fetch maintenance plans when vehicleId changes
   useEffect(() => {
-    fetch("/api/maintenance")
+    const vid = selectedVehicleId;
+    if (!vid) return;
+    fetch(`/api/maintenance?vehicleId=${vid}`)
       .then((res) => res.json())
       .then((data) => setPlans(data))
       .catch((err) => console.error("❌ โหลดแผนบำรุงล้มเหลว:", err));
-  }, []);
+  }, [selectedVehicleId]);
 
-  // 🚗 Fetch vehicle info
+  // 🚗 Fetch vehicle list + selected vehicle detail
   useEffect(() => {
-    const fetchVehicle = async () => {
+    const run = async () => {
       try {
-        const res = await fetch(
-          "/api/vehicle/23429582-fbfd-4c7b-95c1-10c17b3dfebb"
-        );
-        if (!res.ok) throw new Error("Fetch failed");
-        const data = await res.json();
-        if (data.vehicle) setVehicle(data.vehicle);
+        const listRes = await fetch("/api/vehicle");
+        const listData = await listRes.json();
+        const all: Vehicle[] = listData.vehicles ?? [];
+        const sorted = [...all].sort((a, b) => {
+          const hit = (v: Vehicle) => /2\.9/i.test(`${v.name} ${v.plateNo ?? ""}`);
+          if (hit(a) && !hit(b)) return -1;
+          if (!hit(a) && hit(b)) return 1;
+          return (a.name || "").localeCompare(b.name || "");
+        });
+        setVehicles(sorted);
+        const vid = selectedVehicleId || sorted[0]?.id;
+        if (!selectedVehicleId && vid) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("vehicleId", vid);
+          router.replace(url.toString());
+        }
+        if (vid) {
+          const res = await fetch(`/api/vehicle/${vid}`);
+          const data = await res.json();
+          if (data.vehicle) setVehicle(data.vehicle);
+        }
       } catch (err) {
         console.error("❌ โหลดข้อมูลรถล้มเหลว:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchVehicle();
-  }, []);
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicleId]);
 
   useEffect(() => {
     if (editPlan) {
@@ -127,11 +155,13 @@ export default function MaintenanceTimeline() {
         item: editPlan.template.item,
         action: editPlan.template.action,
         intervalHr: String(editPlan.template.intervalHr ?? ""),
+        lastDoneHour: String(editPlan.lastDoneHour ?? ""),
+        nextDueHour: String(editPlan.nextDueHour ?? ""),
       });
     }
   }, [editPlan]);
 
-  const handleConfirmAndSave = async (planId: string) => {
+  const handleConfirmAndSave = async (planId: string, hourOverride?: number) => {
     if (!vehicle) return;
 
     try {
@@ -139,7 +169,7 @@ export default function MaintenanceTimeline() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          currentHour: vehicle.lastHourAfterTest,
+          currentHour: hourOverride ?? vehicle.lastHourAfterTest,
           doneBy: session?.user?.name ?? "Unknown",
         }),
       });
@@ -190,8 +220,43 @@ export default function MaintenanceTimeline() {
       p.template.category.toLowerCase().includes(q) ||
       p.template.item.toLowerCase().includes(q);
 
-    return matchesStatus && matchesSearch;
+    const remaining = p.nextDueHour - (vehicle?.lastHourAfterTest ?? 0);
+    const matchesWindow = dueWindow === "ALL" || (remaining <= dueWindow && remaining >= 0);
+
+    return matchesStatus && matchesSearch && matchesWindow;
   });
+
+  const plansByCategory = filteredPlans.reduce<Record<string, Plan[]>>((acc, p) => {
+    const key = p.template.category || "อื่นๆ";
+    (acc[key] ||= []).push(p);
+    return acc;
+  }, {});
+
+  const exportCsv = () => {
+    const header = [
+      "category","item","action","status","lastDoneHour","nextDueHour","remaining","intervalHr","vehicle","plateNo"
+    ];
+    const rows = filteredPlans.map(p => [
+      p.template.category,
+      p.template.item,
+      p.template.action,
+      p.status,
+      String(p.lastDoneHour ?? ""),
+      String(p.nextDueHour ?? ""),
+      String(Math.max(0, (p.nextDueHour - (vehicle?.lastHourAfterTest ?? 0))).toFixed(0)),
+      String(p.template.intervalHr ?? ""),
+      vehicle?.name ?? "",
+      vehicle?.plateNo ?? "",
+    ]);
+    const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `maintenance-plans.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading)
     return (
@@ -204,8 +269,25 @@ export default function MaintenanceTimeline() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
+      {/* 🚗 Vehicle Selector */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-600">รถ/เครื่อง:</span>
+        <select
+          className="border rounded-md px-3 py-1 text-sm bg-white/90 shadow-sm"
+          value={selectedVehicleId ?? ""}
+          onChange={(e)=>{
+            const url = new URL(window.location.href);
+            url.searchParams.set("vehicleId", e.target.value);
+            router.push(url.toString());
+          }}
+        >
+          {vehicles.map(v=> (
+            <option key={v.id} value={v.id}>{v.name}{v.plateNo?` (${v.plateNo})`:''}</option>
+          ))}
+        </select>
+      </div>
       {/* 🔹 Vehicle Summary */}
-      <Card className="p-6 border-l-4 border-blue-600 shadow-sm bg-gradient-to-r from-blue-50 via-white to-white rounded-xl">
+      <Card className="p-6 border-l-4 border-blue-600 shadow-sm bg-gradient-to-r from-blue-50 via-white to-white rounded-2xl">
         <div className="flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
           <div>
             <h2 className="text-2xl font-bold text-blue-800">{vehicle.name}</h2>
@@ -306,7 +388,14 @@ export default function MaintenanceTimeline() {
                       placeholder="เช่น 200"
                       value={newPlan.intervalHr}
                       onChange={(e) =>
-                        setNewPlan({ ...newPlan, intervalHr: e.target.value })
+                        setNewPlan({
+                          ...newPlan,
+                          intervalHr: e.target.value,
+                          nextDueHour: String(
+                            (parseFloat(newPlan.lastDoneHour || "0") || 0) +
+                              (parseFloat(e.target.value || "0") || 0)
+                          ),
+                        })
                       }
                     />
                   </div>
@@ -317,12 +406,27 @@ export default function MaintenanceTimeline() {
                       type="number"
                       value={newPlan.lastDoneHour}
                       onChange={(e) =>
-                        setNewPlan({ ...newPlan, lastDoneHour: e.target.value })
+                        setNewPlan({
+                          ...newPlan,
+                          lastDoneHour: e.target.value,
+                          nextDueHour: String(
+                            (parseFloat(e.target.value || "0") || 0) +
+                              (parseFloat(newPlan.intervalHr || "0") || 0)
+                          ),
+                        })
                       }
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      ค่าเริ่มต้น: {vehicle?.lastHourAfterTest ?? 0} ชม.
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1">ค่าเริ่มต้น: {vehicle?.lastHourAfterTest ?? 0} ชม.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="nextDueHour">รอบถัดไป (ชม.)</Label>
+                    <Input
+                      id="nextDueHour"
+                      type="number"
+                      value={newPlan.nextDueHour}
+                      readOnly
+                    />
+                    <p className="text-xs text-gray-500 mt-1">คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง</p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -339,12 +443,8 @@ export default function MaintenanceTimeline() {
                             ...newPlan,
                             vehicleId: vehicle?.id,
                             createdBy: session?.user?.name ?? "Unknown",
-                            lastDoneHour: parseFloat(
-                              newPlan.lastDoneHour || "0"
-                            ),
-                            nextDueHour:
-                              parseFloat(newPlan.lastDoneHour || "0") +
-                              parseFloat(newPlan.intervalHr || "0"),
+                            lastDoneHour: parseFloat(newPlan.lastDoneHour || "0"),
+                            nextDueHour: parseFloat(newPlan.nextDueHour || "0"),
                           }),
                         });
                         if (!res.ok) throw new Error("Failed to add");
@@ -358,6 +458,7 @@ export default function MaintenanceTimeline() {
                           action: "",
                           intervalHr: "",
                           lastDoneHour: "",
+                          nextDueHour: "",
                         });
                       } catch (err) {
                         console.error(err);
@@ -375,7 +476,7 @@ export default function MaintenanceTimeline() {
         </div>
 
         {/* 🔍 Filter + Search */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col gap-3 rounded-xl border bg-white/70 backdrop-blur px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-2 flex-wrap">
             {["ALL", "PENDING", "OVERDUE", "DONE"].map((status) => (
               <Button
@@ -397,16 +498,32 @@ export default function MaintenanceTimeline() {
                   : "✅ ทำแล้ว"}
               </Button>
             ))}
+            <div className="mx-2 h-6 w-px bg-gray-200 self-center" />
+            {(["ALL", 24, 48, 100] as const).map((w) => (
+              <Button
+                key={`win-${w}`}
+                variant={dueWindow === w ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDueWindow(w)}
+              >
+                {w === "ALL" ? "ทั้งหมด" : `≤ ${w} ชม.`}
+              </Button>
+            ))}
           </div>
-          <div className="relative w-full sm:w-64">
-            <Input
-              type="text"
-              placeholder=" ค้นหาชื่อหรือหมวดหมู่..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 text-sm"
-            />
-            <span className="absolute left-2 top-2.5 text-gray-400">🔍</span>
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Input
+                type="text"
+                placeholder=" ค้นหาชื่อหรือหมวดหมู่..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 text-sm"
+              />
+              <span className="absolute left-2 top-2.5 text-gray-400">🔍</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={exportCsv} className="shadow-sm">
+              <FileDown className="w-4 h-4 mr-1" /> Export CSV
+            </Button>
           </div>
         </div>
 
@@ -416,8 +533,16 @@ export default function MaintenanceTimeline() {
             ไม่พบข้อมูลที่ตรงกับเงื่อนไข
           </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredPlans.map((p) => {
+          <div className="space-y-6">
+            {Object.entries(plansByCategory).map(([category, items]) => (
+              <div key={category}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-5 w-1.5 rounded bg-blue-500" />
+                  <span className="text-sm font-semibold text-blue-900 tracking-wide">{category}</span>
+                  <span className="text-xs text-gray-500">{items.length} รายการ</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {items.map((p) => {
               const isOverdue =
                 vehicle.lastHourAfterTest &&
                 vehicle.lastHourAfterTest >= p.nextDueHour;
@@ -447,18 +572,18 @@ export default function MaintenanceTimeline() {
                 PENDING: "border-yellow-400 bg-yellow-50",
               };
 
-              return (
-                <Card
-                  key={p.id}
-                  className={`p-4 flex flex-col justify-between gap-4 border-l-4 rounded-xl shadow-sm
-                    ${colorMap[p.status] ?? "border-gray-300 bg-white"}
-                    transition-all duration-300 hover:shadow-lg hover:scale-[1.01]`}
-                >
+                    return (
+                      <Card
+                        key={p.id}
+                        className={`p-5 flex flex-col justify-between gap-4 border-l-4 rounded-2xl shadow-sm
+                    ${colorMap[p.status] ?? "border-gray-200 bg-white/90"}
+                    transition-all duration-300 hover:shadow-lg hover:-translate-y-[2px]`}
+                      >
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex items-start gap-3">
                       {icon}
                       <div>
-                        <h4 className="font-semibold text-gray-800 text-base">
+                              <h4 className="font-semibold text-gray-800 text-base leading-snug">
                           {p.template.category} - {p.template.item}
                         </h4>
                         <p className="text-sm text-gray-600">
@@ -492,7 +617,7 @@ export default function MaintenanceTimeline() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative shadow-inner">
+                      <div className="w-full h-3 bg-gray-200/70 rounded-full overflow-hidden relative shadow-inner">
                     <div
                       className={`absolute left-0 top-0 h-full transition-all duration-700 ${
                         progressPercent >= 100
@@ -503,14 +628,14 @@ export default function MaintenanceTimeline() {
                       }`}
                       style={{ width: `${progressPercent}%` }}
                     />
-                    <span className="absolute inset-0 flex justify-center items-center text-[11px] font-bold text-gray-700 drop-shadow">
+                        <span className="absolute inset-0 flex justify-center items-center text-[11px] font-bold text-gray-700/80 drop-shadow">
                       {progressPercent.toFixed(0)}%
                     </span>
                   </div>
 
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>ล่าสุด: {p.lastDoneHour ?? "-"} ชม.</span>
-                    <span>รอบถัดไป: {p.nextDueHour} ชม.</span>
+                    <span>รอบถัดไป: {p.nextDueHour} ชม. (เหลือ {Math.max(0, (p.nextDueHour - (vehicle.lastHourAfterTest ?? 0))).toFixed(0)} ชม.)</span>
                   </div>
 
                   {/* ✅ Buttons */}
@@ -533,6 +658,10 @@ export default function MaintenanceTimeline() {
                               ต้องการบันทึกแผน <b>{p.template.item}</b> ใช่ไหม?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
+                          <div className="mt-2">
+                            <Label htmlFor={`hour-${p.id}`}>ชั่วโมงเครื่องขณะทำ</Label>
+                            <Input id={`hour-${p.id}`} type="number" defaultValue={vehicle.lastHourAfterTest ?? 0} />
+                          </div>
                           <AlertDialogFooter>
                             <AlertDialogCancel
                               onClick={() => setConfirmId(null)}
@@ -540,7 +669,11 @@ export default function MaintenanceTimeline() {
                               ยกเลิก
                             </AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => handleConfirmAndSave(p.id)}
+                              onClick={() => {
+                                const input = document.getElementById(`hour-${p.id}`) as HTMLInputElement | null;
+                                const val = input ? parseFloat(input.value || '0') : undefined;
+                                handleConfirmAndSave(p.id, val);
+                              }}
                             >
                               ยืนยัน
                             </AlertDialogAction>
@@ -604,9 +737,12 @@ export default function MaintenanceTimeline() {
                       onClose={() => setOpenLog(null)}
                     />
                   )}
-                </Card>
-              );
-            })}
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -660,10 +796,41 @@ export default function MaintenanceTimeline() {
                   type="number"
                   placeholder="เช่น 200"
                   value={editForm.intervalHr}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, intervalHr: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const interval = e.target.value;
+                    const next = String(
+                      (parseFloat(editForm.lastDoneHour || "0") || 0) +
+                        (parseFloat(interval || "0") || 0)
+                    );
+                    setEditForm({ ...editForm, intervalHr: interval, nextDueHour: next });
+                  }}
                 />
+              </div>
+              <div>
+                <Label htmlFor="editLastDoneHour">ชั่วโมงที่ทำล่าสุด</Label>
+                <Input
+                  id="editLastDoneHour"
+                  type="number"
+                  value={editForm.lastDoneHour}
+                  onChange={(e) => {
+                    const last = e.target.value;
+                    const next = String(
+                      (parseFloat(last || "0") || 0) +
+                        (parseFloat(editForm.intervalHr || "0") || 0)
+                    );
+                    setEditForm({ ...editForm, lastDoneHour: last, nextDueHour: next });
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="editNextDueHour">รอบถัดไป (ชม.)</Label>
+                <Input
+                  id="editNextDueHour"
+                  type="number"
+                  value={editForm.nextDueHour}
+                  readOnly
+                />
+                <p className="text-xs text-gray-500 mt-1">คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง</p>
               </div>
             </div>
 
@@ -676,13 +843,15 @@ export default function MaintenanceTimeline() {
                 onClick={async () => {
                   try {
                     const res = await fetch(`/api/maintenance/${editPlan.id}`, {
-                      method: "PUT",
+                      method: "PATCH",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         category: editForm.category,
                         item: editForm.item,
                         action: editForm.action,
                         intervalHr: parseFloat(editForm.intervalHr || "0"),
+                        lastDoneHour: parseFloat(editForm.lastDoneHour || "0"),
+                        nextDueHour: parseFloat(editForm.nextDueHour || "0"),
                       }),
                     });
                     if (!res.ok) throw new Error("Update failed");
@@ -702,6 +871,8 @@ export default function MaintenanceTimeline() {
                                 action: data.plan.template.action,
                                 intervalHr: data.plan.template.intervalHr,
                               },
+                              lastDoneHour: data.plan.lastDoneHour,
+                              nextDueHour: data.plan.nextDueHour,
                             }
                           : p
                       )

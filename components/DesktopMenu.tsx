@@ -16,6 +16,8 @@ export default function DesktopMenu() {
 
   const getRoleColor = (role?: string) => {
     switch (role) {
+      case "dev":
+        return "bg-purple-100 text-purple-700 border border-purple-300";
       case "admin":
         return "bg-red-100 text-red-700 border border-red-300";
       case "manager":
@@ -61,7 +63,13 @@ export default function DesktopMenu() {
                     className="absolute left-0 mt-2 w-52 bg-white text-gray-800 shadow-xl 
                                rounded-lg overflow-hidden ring-1 ring-black/10"
                   >
-                    {item.children.map((sub) => (
+                    {item.children.filter((sub) => {
+                      const role = session.user?.role;
+                      if (sub.path === "/users") {
+                        return role === "admin" || role === "dev";
+                      }
+                      return true;
+                    }).map((sub) => (
                       <button
                         key={sub.label}
                         onClick={() => router.push(sub.path)}

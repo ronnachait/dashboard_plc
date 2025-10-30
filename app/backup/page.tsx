@@ -54,14 +54,18 @@ export default function BackupDeletePage() {
     }
   }, []);
 
-  // ✅ ตรวจสอบสิทธิ์ Admin
+  // ✅ ตรวจสอบสิทธิ์ Admin/Dev
   useEffect(() => {
     if (status === "loading") return;
     if (!session) {
       router.replace("/auth/login");
-    } else if (session.user.role.toUpperCase() !== "ADMIN") {
-      toast.error("🚫 คุณไม่มีสิทธิ์เข้าใช้งานหน้านี้");
-      router.replace("/plc");
+    } else {
+      const role = (session.user.role || "").toLowerCase();
+      const allowed = role === "admin" || role === "dev" || role === "cdhw-wfh8ogfup";
+      if (!allowed) {
+        toast.error("🚫 คุณไม่มีสิทธิ์เข้าใช้งานหน้านี้");
+        router.replace("/plc");
+      }
     }
   }, [session, status, router]);
 
@@ -72,8 +76,8 @@ export default function BackupDeletePage() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // 🚧 ถ้ายังไม่ได้ login หรือไม่ใช่ admin → แสดงข้อความ
-  if (!session || session.user.role.toUpperCase() !== "ADMIN") {
+  // 🚧 ถ้ายังไม่ได้ login หรือไม่ใช่ admin/dev → แสดงข้อความ
+  if (!session || !["admin","dev","cdhw-wfh8ogfup"].includes((session.user.role||"").toLowerCase())) {
     return (
       <p className="text-center text-red-600 mt-10">⏳ Checking access...</p>
     );

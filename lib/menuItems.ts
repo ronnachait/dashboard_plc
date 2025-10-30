@@ -13,6 +13,7 @@ import {
   Settings,
   CircleCheckBig,
   Cog,
+  Users,
 } from "lucide-react";
 
 export const menuItems = [
@@ -44,6 +45,7 @@ export const menuItems = [
       { label: "Raspberry Pi5", Icon: Router, path: "/pi-moniter" },
       { label: "History", Icon: History, path: "/history" },
       { label: "Backup", Icon: DatabaseBackup, path: "/backup" },
+      { label: "Users", Icon: Users, path: "/users" },
     ],
   },
 
