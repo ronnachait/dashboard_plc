@@ -161,7 +161,7 @@ export default function DailyCheckPage() {
 ⛽ ซื้อน้ำมัน: ${data.fuelIn} ลิตร
 🔥 ใช้น้ำมัน: ${data.fuelUsed} ลิตร
 ⚙️ ชั่วโมงรถล่าสุด: ${data.engineHour} ชม.
-⚙️ ชั่วโมงการทดสอบ: ${data.engineHourTest} ชม.
+⚙️ ชั่วโมงการทดสอบ: ${data.engineHourTest.toFixed(2)} ชม.
 
 🛢 ระดับน้ำมันเครื่องยนต์: ${engineOil} - ${data?.firstEG || "-"} mm ${
       engineOilNote ? `(${engineOilNote})` : ""
@@ -201,8 +201,8 @@ ${
           <p className="text-gray-600 mb-6">
             ต้องเชื่อมต่อกับ Google Account เพื่อดึงข้อมูลจาก Sheets
           </p>
-          <Button 
-            onClick={handleAuthorize} 
+          <Button
+            onClick={handleAuthorize}
             className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
           >
             🔗 Connect Google Account
@@ -217,9 +217,7 @@ ${
         <h1 className="text-4xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent mb-2">
           🧭 Daily Check Dashboard
         </h1>
-        <p className="text-gray-500">
-          ข้อมูลจาก Google Sheet + ฐานข้อมูลภายใน
-        </p>
+        <p className="text-gray-500">ข้อมูลจาก Google Sheet + ฐานข้อมูลภายใน</p>
       </div>
 
       {/* ฟอร์มเลือกวันที่และกะ */}

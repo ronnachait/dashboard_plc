@@ -75,7 +75,10 @@ export default function MaintenanceTimeline() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const selectedVehicleId = useMemo(() => searchParams.get("vehicleId"), [searchParams]);
+  const selectedVehicleId = useMemo(
+    () => searchParams.get("vehicleId"),
+    [searchParams]
+  );
 
   const [openAdd, setOpenAdd] = useState(false);
   const [newPlan, setNewPlan] = useState({
@@ -103,6 +106,31 @@ export default function MaintenanceTimeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dueWindow, setDueWindow] = useState<"ALL" | 24 | 48 | 100>("ALL");
 
+  // helper: compute effective status based on current vehicle hours and progress
+  const getEffectiveStatus = (p: Plan): Plan["status"] => {
+    const cur = vehicle?.lastHourAfterTest;
+    // If we don't have current hour info, fall back to stored status
+    if (typeof cur !== "number") return p.status;
+
+    // If already overdue by hours, it's OVERDUE
+    if (cur >= p.nextDueHour) return "OVERDUE";
+
+    // If was marked DONE, check progress toward next due.
+    // Convert to PENDING only when progress >= 80% to avoid flipping DONE -> PENDING immediately.
+    if (p.status === "DONE") {
+      if (p.lastDoneHour != null && p.template.intervalHr) {
+        const denom = p.template.intervalHr;
+        const progress = denom > 0 ? ((cur - p.lastDoneHour) / denom) * 100 : 0;
+        if (progress >= 80) return "PENDING";
+        return "DONE";
+      }
+      return "DONE";
+    }
+
+    // For other stored statuses (PENDING) keep as is (unless overdue handled earlier)
+    return p.status;
+  };
+
   // 📦 Fetch maintenance plans when vehicleId changes
   useEffect(() => {
     const vid = selectedVehicleId;
@@ -121,7 +149,8 @@ export default function MaintenanceTimeline() {
         const listData = await listRes.json();
         const all: Vehicle[] = listData.vehicles ?? [];
         const sorted = [...all].sort((a, b) => {
-          const hit = (v: Vehicle) => /2\.9/i.test(`${v.name} ${v.plateNo ?? ""}`);
+          const hit = (v: Vehicle) =>
+            /2\.9/i.test(`${v.name} ${v.plateNo ?? ""}`);
           if (hit(a) && !hit(b)) return -1;
           if (!hit(a) && hit(b)) return 1;
           return (a.name || "").localeCompare(b.name || "");
@@ -161,7 +190,10 @@ export default function MaintenanceTimeline() {
     }
   }, [editPlan]);
 
-  const handleConfirmAndSave = async (planId: string, hourOverride?: number) => {
+  const handleConfirmAndSave = async (
+    planId: string,
+    hourOverride?: number
+  ) => {
     if (!vehicle) return;
 
     try {
@@ -201,19 +233,21 @@ export default function MaintenanceTimeline() {
   };
 
   const canEdit =
-    session?.user?.role === "admin" || session?.user?.role === "operator";
+    session?.user?.role === "admin" ||
+    session?.user?.role === "operator" ||
+    session?.user?.role === "dev";
 
   // 🧮 Filter + Search logic
   const filteredPlans = plans.filter((p) => {
-    const isOverdue =
-      vehicle?.lastHourAfterTest && vehicle.lastHourAfterTest >= p.nextDueHour;
+    const effectiveStatus = getEffectiveStatus(p);
+    const isOverdue = effectiveStatus === "OVERDUE";
 
     const matchesStatus =
       filterStatus === "ALL"
         ? true
         : filterStatus === "OVERDUE"
         ? isOverdue
-        : p.status === filterStatus;
+        : effectiveStatus === (filterStatus as Plan["status"]);
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -221,34 +255,51 @@ export default function MaintenanceTimeline() {
       p.template.item.toLowerCase().includes(q);
 
     const remaining = p.nextDueHour - (vehicle?.lastHourAfterTest ?? 0);
-    const matchesWindow = dueWindow === "ALL" || (remaining <= dueWindow && remaining >= 0);
+    const matchesWindow =
+      dueWindow === "ALL" || (remaining <= dueWindow && remaining >= 0);
 
     return matchesStatus && matchesSearch && matchesWindow;
   });
 
-  const plansByCategory = filteredPlans.reduce<Record<string, Plan[]>>((acc, p) => {
-    const key = p.template.category || "อื่นๆ";
-    (acc[key] ||= []).push(p);
-    return acc;
-  }, {});
+  const plansByCategory = filteredPlans.reduce<Record<string, Plan[]>>(
+    (acc, p) => {
+      const key = p.template.category || "อื่นๆ";
+      (acc[key] ||= []).push(p);
+      return acc;
+    },
+    {}
+  );
 
   const exportCsv = () => {
     const header = [
-      "category","item","action","status","lastDoneHour","nextDueHour","remaining","intervalHr","vehicle","plateNo"
+      "category",
+      "item",
+      "action",
+      "status",
+      "lastDoneHour",
+      "nextDueHour",
+      "remaining",
+      "intervalHr",
+      "vehicle",
+      "plateNo",
     ];
-    const rows = filteredPlans.map(p => [
+    const rows = filteredPlans.map((p) => [
       p.template.category,
       p.template.item,
       p.template.action,
-      p.status,
+      getEffectiveStatus(p), // export effective status
       String(p.lastDoneHour ?? ""),
       String(p.nextDueHour ?? ""),
-      String(Math.max(0, (p.nextDueHour - (vehicle?.lastHourAfterTest ?? 0))).toFixed(0)),
+      String(
+        Math.max(0, p.nextDueHour - (vehicle?.lastHourAfterTest ?? 0)).toFixed(
+          0
+        )
+      ),
       String(p.template.intervalHr ?? ""),
       vehicle?.name ?? "",
       vehicle?.plateNo ?? "",
     ]);
-    const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -275,14 +326,17 @@ export default function MaintenanceTimeline() {
         <select
           className="border rounded-md px-3 py-1 text-sm bg-white/90 shadow-sm"
           value={selectedVehicleId ?? ""}
-          onChange={(e)=>{
+          onChange={(e) => {
             const url = new URL(window.location.href);
             url.searchParams.set("vehicleId", e.target.value);
             router.push(url.toString());
           }}
         >
-          {vehicles.map(v=> (
-            <option key={v.id} value={v.id}>{v.name}{v.plateNo?` (${v.plateNo})`:''}</option>
+          {vehicles.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+              {v.plateNo ? ` (${v.plateNo})` : ""}
+            </option>
           ))}
         </select>
       </div>
@@ -416,7 +470,9 @@ export default function MaintenanceTimeline() {
                         })
                       }
                     />
-                    <p className="text-xs text-gray-500 mt-1">ค่าเริ่มต้น: {vehicle?.lastHourAfterTest ?? 0} ชม.</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ค่าเริ่มต้น: {vehicle?.lastHourAfterTest ?? 0} ชม.
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="nextDueHour">รอบถัดไป (ชม.)</Label>
@@ -426,7 +482,9 @@ export default function MaintenanceTimeline() {
                       value={newPlan.nextDueHour}
                       readOnly
                     />
-                    <p className="text-xs text-gray-500 mt-1">คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -443,7 +501,9 @@ export default function MaintenanceTimeline() {
                             ...newPlan,
                             vehicleId: vehicle?.id,
                             createdBy: session?.user?.name ?? "Unknown",
-                            lastDoneHour: parseFloat(newPlan.lastDoneHour || "0"),
+                            lastDoneHour: parseFloat(
+                              newPlan.lastDoneHour || "0"
+                            ),
                             nextDueHour: parseFloat(newPlan.nextDueHour || "0"),
                           }),
                         });
@@ -521,7 +581,12 @@ export default function MaintenanceTimeline() {
               />
               <span className="absolute left-2 top-2.5 text-gray-400">🔍</span>
             </div>
-            <Button variant="outline" size="sm" onClick={exportCsv} className="shadow-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              className="shadow-sm"
+            >
               <FileDown className="w-4 h-4 mr-1" /> Export CSV
             </Button>
           </div>
@@ -538,205 +603,240 @@ export default function MaintenanceTimeline() {
               <div key={category}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="h-5 w-1.5 rounded bg-blue-500" />
-                  <span className="text-sm font-semibold text-blue-900 tracking-wide">{category}</span>
-                  <span className="text-xs text-gray-500">{items.length} รายการ</span>
+                  <span className="text-sm font-semibold text-blue-900 tracking-wide">
+                    {category}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {items.length} รายการ
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {items.map((p) => {
-              const isOverdue =
-                vehicle.lastHourAfterTest &&
-                vehicle.lastHourAfterTest >= p.nextDueHour;
+                    const effectiveStatus = getEffectiveStatus(p);
+                    const isOverdue = effectiveStatus === "OVERDUE";
 
-              const progressPercent =
-                p.lastDoneHour && p.template.intervalHr
-                  ? Math.min(
-                      ((vehicle.lastHourAfterTest! - p.lastDoneHour) /
-                        p.template.intervalHr) *
-                        100,
-                      100
-                    )
-                  : 0;
+                    const progressPercent =
+                      p.lastDoneHour && p.template.intervalHr
+                        ? Math.min(
+                            ((vehicle.lastHourAfterTest! - p.lastDoneHour) /
+                              p.template.intervalHr) *
+                              100,
+                            100
+                          )
+                        : 0;
 
-              const icon =
-                p.status === "DONE" ? (
-                  <CheckCircle2 className="text-green-500" />
-                ) : isOverdue ? (
-                  <AlertTriangle className="text-red-500" />
-                ) : (
-                  <Clock className="text-yellow-500" />
-                );
+                    const icon =
+                      effectiveStatus === "DONE" ? (
+                        <CheckCircle2 className="text-green-500" />
+                      ) : isOverdue ? (
+                        <AlertTriangle className="text-red-500" />
+                      ) : (
+                        <Clock className="text-yellow-500" />
+                      );
 
-              const colorMap: Record<string, string> = {
-                DONE: "border-green-500 bg-green-50",
-                OVERDUE: "border-red-500 bg-red-50",
-                PENDING: "border-yellow-400 bg-yellow-50",
-              };
+                    const colorMap: Record<string, string> = {
+                      DONE: "border-green-500 bg-green-50",
+                      OVERDUE: "border-red-500 bg-red-50",
+                      PENDING: "border-yellow-400 bg-yellow-50",
+                    };
 
                     return (
                       <Card
                         key={p.id}
                         className={`p-5 flex flex-col justify-between gap-4 border-l-4 rounded-2xl shadow-sm
-                    ${colorMap[p.status] ?? "border-gray-200 bg-white/90"}
+                    ${
+                      colorMap[effectiveStatus] ?? "border-gray-200 bg-white/90"
+                    }
                     transition-all duration-300 hover:shadow-lg hover:-translate-y-[2px]`}
                       >
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex items-start gap-3">
-                      {icon}
-                      <div>
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex items-start gap-3">
+                            {icon}
+                            <div>
                               <h4 className="font-semibold text-gray-800 text-base leading-snug">
-                          {p.template.category} - {p.template.item}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          งาน:{" "}
-                          <span className="font-medium text-gray-800">
-                            {p.template.action}
-                          </span>
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          รอบ: {p.template.intervalHr ?? "-"} ชั่วโมง
-                        </p>
-                      </div>
-                    </div>
-
-                    <Badge
-                      variant={
-                        p.status === "DONE"
-                          ? "default"
-                          : isOverdue || p.status === "OVERDUE"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                      className="text-[11px] tracking-wide"
-                    >
-                      {isOverdue
-                        ? "เกินรอบ"
-                        : p.status === "DONE"
-                        ? "ทำแล้ว"
-                        : "รอดำเนินการ"}
-                    </Badge>
-                  </div>
-
-                  {/* Progress bar */}
-                      <div className="w-full h-3 bg-gray-200/70 rounded-full overflow-hidden relative shadow-inner">
-                    <div
-                      className={`absolute left-0 top-0 h-full transition-all duration-700 ${
-                        progressPercent >= 100
-                          ? "bg-gradient-to-r from-green-400 to-green-600"
-                          : progressPercent >= 80
-                          ? "bg-gradient-to-r from-yellow-300 to-yellow-500"
-                          : "bg-gradient-to-r from-blue-400 to-blue-600"
-                      }`}
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                        <span className="absolute inset-0 flex justify-center items-center text-[11px] font-bold text-gray-700/80 drop-shadow">
-                      {progressPercent.toFixed(0)}%
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between text-xs text-gray-600">
-                    <span>ล่าสุด: {p.lastDoneHour ?? "-"} ชม.</span>
-                    <span>รอบถัดไป: {p.nextDueHour} ชม. (เหลือ {Math.max(0, (p.nextDueHour - (vehicle.lastHourAfterTest ?? 0))).toFixed(0)} ชม.)</span>
-                  </div>
-
-                  {/* ✅ Buttons */}
-                  <div className="flex justify-between items-center mt-2">
-                    {canEdit && p.status !== "DONE" && (
-                      <AlertDialog open={confirmId === p.id}>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            onClick={() => setConfirmId(p.id)}
-                            className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white text-xs font-medium shadow-sm"
-                          >
-                            ✅ บันทึกการบำรุง
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>ยืนยันการบำรุง?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              ต้องการบันทึกแผน <b>{p.template.item}</b> ใช่ไหม?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <div className="mt-2">
-                            <Label htmlFor={`hour-${p.id}`}>ชั่วโมงเครื่องขณะทำ</Label>
-                            <Input id={`hour-${p.id}`} type="number" defaultValue={vehicle.lastHourAfterTest ?? 0} />
+                                {p.template.category} - {p.template.item}
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                งาน:{" "}
+                                <span className="font-medium text-gray-800">
+                                  {p.template.action}
+                                </span>
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                รอบ: {p.template.intervalHr ?? "-"} ชั่วโมง
+                              </p>
+                            </div>
                           </div>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel
-                              onClick={() => setConfirmId(null)}
-                            >
-                              ยกเลิก
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => {
-                                const input = document.getElementById(`hour-${p.id}`) as HTMLInputElement | null;
-                                const val = input ? parseFloat(input.value || '0') : undefined;
-                                handleConfirmAndSave(p.id, val);
-                              }}
-                            >
-                              ยืนยัน
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
 
-                    {/* ⚙️ Dropdown */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 border-gray-300 hover:bg-gray-100"
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-36 text-sm">
-                        <DropdownMenuItem onClick={() => setOpenLog(p.id)}>
-                          📜 ดูประวัติ
-                        </DropdownMenuItem>
-                        {canEdit && (
-                          <>
-                            <DropdownMenuItem onClick={() => setEditPlan(p)}>
-                              ✏️ แก้ไข
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600 focus:bg-red-50"
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch(
-                                    `/api/maintenance/${p.id}`,
-                                    { method: "DELETE" }
-                                  );
-                                  if (!res.ok) throw new Error("Delete failed");
-                                  setPlans((prev) =>
-                                    prev.filter((x) => x.id !== p.id)
-                                  );
-                                  toast.success("🗑️ ลบสำเร็จ");
-                                } catch (err) {
-                                  console.error(err);
-                                  toast.error("❌ ลบไม่สำเร็จ");
-                                }
-                              }}
+                          <Badge
+                            variant={
+                              effectiveStatus === "DONE"
+                                ? "default"
+                                : isOverdue
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="text-[11px] tracking-wide"
+                          >
+                            {isOverdue
+                              ? "เกินรอบ"
+                              : effectiveStatus === "DONE"
+                              ? "ทำแล้ว"
+                              : "รอดำเนินการ"}
+                          </Badge>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="w-full h-3 bg-gray-200/70 rounded-full overflow-hidden relative shadow-inner">
+                          <div
+                            className={`absolute left-0 top-0 h-full transition-all duration-700 ${
+                              progressPercent >= 100
+                                ? "bg-gradient-to-r from-green-400 to-green-600"
+                                : progressPercent >= 80
+                                ? "bg-gradient-to-r from-yellow-300 to-yellow-500"
+                                : "bg-gradient-to-r from-blue-400 to-blue-600"
+                            }`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                          <span className="absolute inset-0 flex justify-center items-center text-[11px] font-bold text-gray-700/80 drop-shadow">
+                            {progressPercent.toFixed(0)}%
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between text-xs text-gray-600">
+                          <span>ล่าสุด: {p.lastDoneHour ?? "-"} ชม.</span>
+                          <span>
+                            รอบถัดไป: {p.nextDueHour} ชม. (เหลือ{" "}
+                            {Math.max(
+                              0,
+                              p.nextDueHour - (vehicle.lastHourAfterTest ?? 0)
+                            ).toFixed(0)}{" "}
+                            ชม.)
+                          </span>
+                        </div>
+
+                        {/* ✅ Buttons */}
+                        <div className="flex justify-between items-center mt-2">
+                          {canEdit && effectiveStatus !== "DONE" && (
+                            <AlertDialog open={confirmId === p.id}>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  onClick={() => setConfirmId(p.id)}
+                                  className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white text-xs font-medium shadow-sm"
+                                >
+                                  ✅ บันทึกการบำรุง
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    ยืนยันการบำรุง?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    ต้องการบันทึกแผน <b>{p.template.item}</b>{" "}
+                                    ใช่ไหม?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <div className="mt-2">
+                                  <Label htmlFor={`hour-${p.id}`}>
+                                    ชั่วโมงเครื่องขณะทำ
+                                  </Label>
+                                  <Input
+                                    id={`hour-${p.id}`}
+                                    type="number"
+                                    defaultValue={
+                                      vehicle.lastHourAfterTest ?? 0
+                                    }
+                                  />
+                                </div>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel
+                                    onClick={() => setConfirmId(null)}
+                                  >
+                                    ยกเลิก
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => {
+                                      const input = document.getElementById(
+                                        `hour-${p.id}`
+                                      ) as HTMLInputElement | null;
+                                      const val = input
+                                        ? parseFloat(input.value || "0")
+                                        : undefined;
+                                      handleConfirmAndSave(p.id, val);
+                                    }}
+                                  >
+                                    ยืนยัน
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+
+                          {/* ⚙️ Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 border-gray-300 hover:bg-gray-100"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-36 text-sm"
                             >
-                              🗑️ ลบ
-                            </DropdownMenuItem>
-                          </>
+                              <DropdownMenuItem
+                                onClick={() => setOpenLog(p.id)}
+                              >
+                                📜 ดูประวัติ
+                              </DropdownMenuItem>
+                              {canEdit && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => setEditPlan(p)}
+                                  >
+                                    ✏️ แก้ไข
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-red-600 focus:bg-red-50"
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(
+                                          `/api/maintenance/${p.id}`,
+                                          { method: "DELETE" }
+                                        );
+                                        if (!res.ok)
+                                          throw new Error("Delete failed");
+                                        setPlans((prev) =>
+                                          prev.filter((x) => x.id !== p.id)
+                                        );
+                                        toast.success("🗑️ ลบสำเร็จ");
+                                      } catch (err) {
+                                        console.error(err);
+                                        toast.error("❌ ลบไม่สำเร็จ");
+                                      }
+                                    }}
+                                  >
+                                    🗑️ ลบ
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        {/* 🧾 Modal Log */}
+                        {openLog === p.id && (
+                          <MaintenanceLogModal
+                            planId={p.id}
+                            open={true}
+                            onClose={() => setOpenLog(null)}
+                          />
                         )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {/* 🧾 Modal Log */}
-                  {openLog === p.id && (
-                    <MaintenanceLogModal
-                      planId={p.id}
-                      open={true}
-                      onClose={() => setOpenLog(null)}
-                    />
-                  )}
                       </Card>
                     );
                   })}
@@ -802,7 +902,11 @@ export default function MaintenanceTimeline() {
                       (parseFloat(editForm.lastDoneHour || "0") || 0) +
                         (parseFloat(interval || "0") || 0)
                     );
-                    setEditForm({ ...editForm, intervalHr: interval, nextDueHour: next });
+                    setEditForm({
+                      ...editForm,
+                      intervalHr: interval,
+                      nextDueHour: next,
+                    });
                   }}
                 />
               </div>
@@ -818,7 +922,11 @@ export default function MaintenanceTimeline() {
                       (parseFloat(last || "0") || 0) +
                         (parseFloat(editForm.intervalHr || "0") || 0)
                     );
-                    setEditForm({ ...editForm, lastDoneHour: last, nextDueHour: next });
+                    setEditForm({
+                      ...editForm,
+                      lastDoneHour: last,
+                      nextDueHour: next,
+                    });
                   }}
                 />
               </div>
@@ -830,7 +938,9 @@ export default function MaintenanceTimeline() {
                   value={editForm.nextDueHour}
                   readOnly
                 />
-                <p className="text-xs text-gray-500 mt-1">คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  คำนวณอัตโนมัติ = ชั่วโมงล่าสุด + รอบบำรุง
+                </p>
               </div>
             </div>
 

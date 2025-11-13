@@ -39,7 +39,18 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { Fuel, TrendingUp, Droplet, Calendar, Sun, Moon, Truck, Clock, Activity, Info } from "lucide-react";
+import {
+  Fuel,
+  TrendingUp,
+  Droplet,
+  Calendar,
+  Sun,
+  Moon,
+  Truck,
+  Clock,
+  Activity,
+  Info,
+} from "lucide-react";
 import type { Shift } from "@prisma/client";
 import FuelHistoryPage from "@/components/history-fuel-use";
 import { toast } from "sonner";
@@ -100,7 +111,7 @@ export default function FuelPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -144,7 +155,11 @@ export default function FuelPage() {
           if (existing) {
             existing.totalIn += log.fuelIn;
             existing.totalUsed += log.fuelUsed;
-            if (log.fuelIn > 0 && (!existing.lastRefuelDate || new Date(log.date) > new Date(existing.lastRefuelDate))) {
+            if (
+              log.fuelIn > 0 &&
+              (!existing.lastRefuelDate ||
+                new Date(log.date) > new Date(existing.lastRefuelDate))
+            ) {
               existing.lastRefuelDate = log.date;
             }
           } else {
@@ -161,8 +176,11 @@ export default function FuelPage() {
 
         // คำนวณ efficiency
         vehicleMap.forEach((stats) => {
-          const vehicleLogs = data.logs.filter((l: FuelLog) => l.vehicle.id === stats.vehicleId);
-          stats.efficiency = vehicleLogs.length > 0 ? stats.totalUsed / vehicleLogs.length : 0;
+          const vehicleLogs = data.logs.filter(
+            (l: FuelLog) => l.vehicle.id === stats.vehicleId
+          );
+          stats.efficiency =
+            vehicleLogs.length > 0 ? stats.totalUsed / vehicleLogs.length : 0;
         });
 
         setVehicleStats(Array.from(vehicleMap.values()));
@@ -211,9 +229,10 @@ export default function FuelPage() {
       });
 
       if (res.ok) {
-        const vehicleName = vehicles.find(v => v.id === selectedVehicle)?.name || "รถ";
+        const vehicleName =
+          vehicles.find((v) => v.id === selectedVehicle)?.name || "รถ";
         toast.success(
-          type === "IN" 
+          type === "IN"
             ? `✅ บันทึกการเติมน้ำมัน ${amount} ลิตร (${vehicleName}) สำเร็จ!`
             : `✅ บันทึกการใช้น้ำมัน ${amount} ลิตร (${vehicleName}) สำเร็จ!`
         );
@@ -250,7 +269,7 @@ export default function FuelPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto pb-28">
       {/* Page Header */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-6"
@@ -261,9 +280,7 @@ export default function FuelPage() {
         <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
           Fuel Management
         </h1>
-        <p className="text-gray-600 text-sm">
-          ระบบจัดการน้ำมันและเชื้อเพลิง
-        </p>
+        <p className="text-gray-600 text-sm">ระบบจัดการน้ำมันและเชื้อเพลิง</p>
         <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-cyan-600 mx-auto mt-4 rounded-full"></div>
       </motion.div>
 
@@ -328,7 +345,10 @@ export default function FuelPage() {
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {vehicleStats.map((stats) => (
-                  <Card key={stats.vehicleId} className="border-2 border-gray-200 hover:border-blue-400 transition-all">
+                  <Card
+                    key={stats.vehicleId}
+                    className="border-2 border-gray-200 hover:border-blue-400 transition-all"
+                  >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base font-semibold text-gray-800">
@@ -342,17 +362,23 @@ export default function FuelPage() {
                     <CardContent className="space-y-2 text-sm">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">เติมทั้งหมด:</span>
-                        <span className="font-semibold text-green-600">{stats.totalIn.toFixed(1)} L</span>
+                        <span className="font-semibold text-green-600">
+                          {stats.totalIn.toFixed(1)} L
+                        </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">ใช้ทั้งหมด:</span>
-                        <span className="font-semibold text-red-600">{stats.totalUsed.toFixed(1)} L</span>
+                        <span className="font-semibold text-red-600">
+                          {stats.totalUsed.toFixed(1)} L
+                        </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">เติมครั้งล่าสุด:</span>
                         <span className="font-semibold text-blue-600">
                           {stats.lastRefuelDate
-                            ? new Date(stats.lastRefuelDate).toLocaleDateString("th-TH")
+                            ? new Date(stats.lastRefuelDate).toLocaleDateString(
+                                "th-TH"
+                              )
                             : "ไม่มีข้อมูล"}
                         </span>
                       </div>
@@ -361,7 +387,9 @@ export default function FuelPage() {
                           <Info className="w-3 h-3" />
                           เฉลี่ย/รายการ:
                         </span>
-                        <span className="font-semibold text-purple-600">{stats.efficiency.toFixed(2)} L</span>
+                        <span className="font-semibold text-purple-600">
+                          {stats.efficiency.toFixed(2)} L
+                        </span>
                       </div>
                     </CardContent>
                   </Card>
@@ -393,9 +421,11 @@ export default function FuelPage() {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        log.fuelIn > 0 ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          log.fuelIn > 0 ? "bg-green-100" : "bg-red-100"
+                        }`}
+                      >
                         {log.fuelIn > 0 ? (
                           <Droplet className="w-5 h-5 text-green-600" />
                         ) : (
@@ -406,7 +436,9 @@ export default function FuelPage() {
                         <p className="font-semibold text-gray-800">
                           {log.vehicle.name}
                           {log.vehicle.plateNo && (
-                            <span className="text-gray-500 text-sm ml-1">({log.vehicle.plateNo})</span>
+                            <span className="text-gray-500 text-sm ml-1">
+                              ({log.vehicle.plateNo})
+                            </span>
                           )}
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1">
@@ -416,11 +448,17 @@ export default function FuelPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <Badge variant={log.fuelIn > 0 ? "default" : "destructive"} className="mb-1">
-                        {log.fuelIn > 0 ? "เติม" : "ใช้"} {(log.fuelIn || log.fuelUsed).toFixed(1)} L
+                      <Badge
+                        variant={log.fuelIn > 0 ? "default" : "destructive"}
+                        className="mb-1"
+                      >
+                        {log.fuelIn > 0 ? "เติม" : "ใช้"}{" "}
+                        {(log.fuelIn || log.fuelUsed).toFixed(1)} L
                       </Badge>
                       {log.note && (
-                        <p className="text-xs text-gray-500 max-w-[150px] truncate">{log.note}</p>
+                        <p className="text-xs text-gray-500 max-w-[150px] truncate">
+                          {log.note}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -444,158 +482,174 @@ export default function FuelPage() {
             </DialogDescription>
           </DialogHeader>
           <div>
-          <Tabs defaultValue="IN" className="w-full">
-            <TabsList className="grid grid-cols-2 w-full mb-6">
-              <TabsTrigger
-                value="IN"
-                className="data-[state=active]:bg-green-600 data-[state=active]:text-white"
-              >
-                ✅ เติมน้ำมัน
-              </TabsTrigger>
-              <TabsTrigger
-                value="USED"
-                className="data-[state=active]:bg-red-600 data-[state=active]:text-white"
-              >
-                📉 ใช้น้ำมัน
-              </TabsTrigger>
-            </TabsList>
+            <Tabs defaultValue="IN" className="w-full">
+              <TabsList className="grid grid-cols-2 w-full mb-6">
+                <TabsTrigger
+                  value="IN"
+                  className="data-[state=active]:bg-green-600 data-[state=active]:text-white"
+                >
+                  ✅ เติมน้ำมัน
+                </TabsTrigger>
+                <TabsTrigger
+                  value="USED"
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white"
+                >
+                  📉 ใช้น้ำมัน
+                </TabsTrigger>
+              </TabsList>
 
-            {/* เติมน้ำมัน */}
-            <TabsContent value="IN">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    เลือกรถ <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={selectedVehicle} onValueChange={(val) => setSelectedVehicle(val)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="-- เลือกรถที่ต้องการเติมน้ำมัน --" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicles.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          🚗 {v.name} {v.plateNo ? `(${v.plateNo})` : ""}
+              {/* เติมน้ำมัน */}
+              <TabsContent value="IN">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      เลือกรถ <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={selectedVehicle}
+                      onValueChange={(val) => setSelectedVehicle(val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="-- เลือกรถที่ต้องการเติมน้ำมัน --" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vehicles.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            🚗 {v.name} {v.plateNo ? `(${v.plateNo})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      ปริมาณน้ำมัน <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="ระบุปริมาณ (ลิตร)"
+                      value={amount || ""}
+                      onChange={(e) =>
+                        setAmount(parseFloat(e.target.value) || 0)
+                      }
+                      min="0"
+                      step="0.01"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      💡 กรอกจำนวนลิตรที่เติม
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      กะการทำงาน
+                    </label>
+                    <Select
+                      value={shift}
+                      onValueChange={(val: Shift) => setShift(val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="เลือกกะ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MORNING">
+                          🌞 กะเช้า (Morning)
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                        <SelectItem value="NIGHT">🌙 กะดึก (Night)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    ปริมาณน้ำมัน <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="number"
-                    placeholder="ระบุปริมาณ (ลิตร)"
-                    value={amount || ""}
-                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="0.01"
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">💡 กรอกจำนวนลิตรที่เติม</p>
-                </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      หมายเหตุ
+                    </label>
+                    <Textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="เช่น เติมเต็มถัง, เติมที่ปั๊ม PTT"
+                      className="resize-none h-20"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    กะการทำงาน
-                  </label>
-                  <Select
-                    value={shift}
-                    onValueChange={(val: Shift) => setShift(val)}
+                  <Button
+                    onClick={() => handleSave("IN")}
+                    disabled={saving || !selectedVehicle || !amount}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-12 text-base font-semibold"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="เลือกกะ" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MORNING">🌞 กะเช้า (Morning)</SelectItem>
-                      <SelectItem value="NIGHT">🌙 กะดึก (Night)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {saving ? "⏳ กำลังบันทึก..." : "✅ บันทึกการเติมน้ำมัน"}
+                  </Button>
                 </div>
+              </TabsContent>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    หมายเหตุ
-                  </label>
-                  <Textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="เช่น เติมเต็มถัง, เติมที่ปั๊ม PTT"
-                    className="resize-none h-20"
-                  />
+              {/* ใช้น้ำมัน */}
+              <TabsContent value="USED">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      เลือกรถ <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={selectedVehicle}
+                      onValueChange={(val) => setSelectedVehicle(val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="-- เลือกรถที่ใช้น้ำมัน --" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vehicles.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            🚗 {v.name} {v.plateNo ? `(${v.plateNo})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      ปริมาณน้ำมัน <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="ระบุปริมาณ (ลิตร)"
+                      value={amount || ""}
+                      onChange={(e) =>
+                        setAmount(parseFloat(e.target.value) || 0)
+                      }
+                      min="0"
+                      step="0.01"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      💡 กรอกจำนวนลิตรที่ใช้ไป
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">
+                      หมายเหตุ
+                    </label>
+                    <Textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="เช่น ใช้ในการทำงาน, ทดสอบเครื่อง"
+                      className="resize-none h-20"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => handleSave("USED")}
+                    disabled={saving || !selectedVehicle || !amount}
+                    className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 h-12 text-base font-semibold"
+                  >
+                    {saving ? "⏳ กำลังบันทึก..." : "📉 บันทึกการใช้น้ำมัน"}
+                  </Button>
                 </div>
-
-                <Button
-                  onClick={() => handleSave("IN")}
-                  disabled={saving || !selectedVehicle || !amount}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-12 text-base font-semibold"
-                >
-                  {saving ? "⏳ กำลังบันทึก..." : "✅ บันทึกการเติมน้ำมัน"}
-                </Button>
-              </div>
-            </TabsContent>
-
-            {/* ใช้น้ำมัน */}
-            <TabsContent value="USED">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    เลือกรถ <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={selectedVehicle} onValueChange={(val) => setSelectedVehicle(val)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="-- เลือกรถที่ใช้น้ำมัน --" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicles.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          🚗 {v.name} {v.plateNo ? `(${v.plateNo})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    ปริมาณน้ำมัน <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="number"
-                    placeholder="ระบุปริมาณ (ลิตร)"
-                    value={amount || ""}
-                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="0.01"
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">💡 กรอกจำนวนลิตรที่ใช้ไป</p>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    หมายเหตุ
-                  </label>
-                  <Textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="เช่น ใช้ในการทำงาน, ทดสอบเครื่อง"
-                    className="resize-none h-20"
-                  />
-                </div>
-
-                <Button
-                  onClick={() => handleSave("USED")}
-                  disabled={saving || !selectedVehicle || !amount}
-                  className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 h-12 text-base font-semibold"
-                >
-                  {saving ? "⏳ กำลังบันทึก..." : "📉 บันทึกการใช้น้ำมัน"}
-                </Button>
-              </div>
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+            </Tabs>
           </div>
         </DialogContent>
       </Dialog>
@@ -615,7 +669,8 @@ export default function FuelPage() {
       <Card className="shadow-lg rounded-xl overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg md:text-xl font-bold flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-600" /> 📆 สรุปน้ำมันรายวัน (แยกกะ)
+            <Calendar className="w-5 h-5 text-blue-600" /> 📆 สรุปน้ำมันรายวัน
+            (แยกกะ)
           </CardTitle>
           <div className="text-sm text-gray-600">
             ทั้งหมด {daily.length} รายการ
@@ -628,16 +683,29 @@ export default function FuelPage() {
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-bold">วันที่</TableHead>
                   <TableHead className="font-bold">กะ</TableHead>
-                  <TableHead className="text-green-700 font-bold">เติมรวม (L)</TableHead>
-                  <TableHead className="text-red-700 font-bold">ใช้รวม (L)</TableHead>
-                  <TableHead className="text-blue-700 font-bold">คงเหลือ (L)</TableHead>
+                  <TableHead className="text-green-700 font-bold">
+                    เติมรวม (L)
+                  </TableHead>
+                  <TableHead className="text-red-700 font-bold">
+                    ใช้รวม (L)
+                  </TableHead>
+                  <TableHead className="text-blue-700 font-bold">
+                    คงเหลือ (L)
+                  </TableHead>
                   <TableHead className="font-bold">รถที่ใช้</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {[...daily]
-                  .sort((a, b) => new Date(b.shiftDate).getTime() - new Date(a.shiftDate).getTime())
-                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .sort(
+                    (a, b) =>
+                      new Date(b.shiftDate).getTime() -
+                      new Date(a.shiftDate).getTime()
+                  )
+                  .slice(
+                    (currentPage - 1) * itemsPerPage,
+                    currentPage * itemsPerPage
+                  )
                   .map((d, idx) => (
                     <TableRow
                       key={`${d.shiftDate}-${d.shift}`}
@@ -654,11 +722,17 @@ export default function FuelPage() {
 
                       <TableCell>
                         {d.shift === "MORNING" ? (
-                          <Badge variant="outline" className="flex items-center gap-1 w-fit bg-yellow-50 text-yellow-700 border-yellow-300">
+                          <Badge
+                            variant="outline"
+                            className="flex items-center gap-1 w-fit bg-yellow-50 text-yellow-700 border-yellow-300"
+                          >
                             <Sun className="w-3 h-3" /> กะเช้า
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="flex items-center gap-1 w-fit bg-indigo-50 text-indigo-700 border-indigo-300">
+                          <Badge
+                            variant="outline"
+                            className="flex items-center gap-1 w-fit bg-indigo-50 text-indigo-700 border-indigo-300"
+                          >
                             <Moon className="w-3 h-3" /> กะดึก
                           </Badge>
                         )}
@@ -674,8 +748,23 @@ export default function FuelPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {Array.from(new Set(d.logs.map(l => `${l.vehicle.name}${l.vehicle.plateNo ? ` (${l.vehicle.plateNo})` : ""}`))).map((vInfo, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
+                          {Array.from(
+                            new Set(
+                              d.logs.map(
+                                (l) =>
+                                  `${l.vehicle.name}${
+                                    l.vehicle.plateNo
+                                      ? ` (${l.vehicle.plateNo})`
+                                      : ""
+                                  }`
+                              )
+                            )
+                          ).map((vInfo, i) => (
+                            <Badge
+                              key={i}
+                              variant="secondary"
+                              className="text-xs"
+                            >
                               {vInfo}
                             </Badge>
                           ))}
@@ -691,33 +780,39 @@ export default function FuelPage() {
           {daily.length > itemsPerPage && (
             <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                แสดง {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, daily.length)} จาก {daily.length} รายการ
+                แสดง {(currentPage - 1) * itemsPerPage + 1} -{" "}
+                {Math.min(currentPage * itemsPerPage, daily.length)} จาก{" "}
+                {daily.length} รายการ
               </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                   className="disabled:opacity-50"
                 >
                   ← ก่อนหน้า
                 </Button>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.ceil(daily.length / itemsPerPage) }).map((_, i) => {
+                  {Array.from({
+                    length: Math.ceil(daily.length / itemsPerPage),
+                  }).map((_, i) => {
                     const pageNum = i + 1;
                     const totalPages = Math.ceil(daily.length / itemsPerPage);
-                    
+
                     // แสดงเฉพาะบางหน้า
                     if (
-                      pageNum === 1 || 
-                      pageNum === totalPages || 
+                      pageNum === 1 ||
+                      pageNum === totalPages ||
                       (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
                     ) {
                       return (
                         <Button
                           key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
+                          variant={
+                            currentPage === pageNum ? "default" : "outline"
+                          }
                           size="sm"
                           onClick={() => setCurrentPage(pageNum)}
                           className="w-10"
@@ -726,10 +821,14 @@ export default function FuelPage() {
                         </Button>
                       );
                     } else if (
-                      pageNum === currentPage - 2 || 
+                      pageNum === currentPage - 2 ||
                       pageNum === currentPage + 2
                     ) {
-                      return <span key={pageNum} className="px-2">...</span>;
+                      return (
+                        <span key={pageNum} className="px-2">
+                          ...
+                        </span>
+                      );
                     }
                     return null;
                   })}
@@ -737,8 +836,14 @@ export default function FuelPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(daily.length / itemsPerPage), p + 1))}
-                  disabled={currentPage === Math.ceil(daily.length / itemsPerPage)}
+                  onClick={() =>
+                    setCurrentPage((p) =>
+                      Math.min(Math.ceil(daily.length / itemsPerPage), p + 1)
+                    )
+                  }
+                  disabled={
+                    currentPage === Math.ceil(daily.length / itemsPerPage)
+                  }
                   className="disabled:opacity-50"
                 >
                   ถัดไป →
@@ -753,13 +858,17 @@ export default function FuelPage() {
       <Card className="shadow-lg rounded-xl">
         <CardHeader>
           <CardTitle className="text-lg md:text-xl font-bold flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-600" /> 📊 การใช้น้ำมันต่อกะ (MORNING vs NIGHT)
+            <TrendingUp className="w-5 h-5 text-blue-600" /> 📊
+            การใช้น้ำมันต่อกะ (MORNING vs NIGHT)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {(() => {
             // สร้างข้อมูลเทียบการใช้ต่อกะในแต่ละวัน
-            const map: Record<string, { date: string; MORNING: number; NIGHT: number }> = {};
+            const map: Record<
+              string,
+              { date: string; MORNING: number; NIGHT: number }
+            > = {};
             daily.forEach((d) => {
               const day = new Date(d.shiftDate).toLocaleDateString("th-TH", {
                 timeZone: "Asia/Bangkok",
@@ -781,8 +890,18 @@ export default function FuelPage() {
                   <YAxis />
                   <Tooltip formatter={(v: number) => `${v.toFixed(2)} ลิตร`} />
                   <Legend />
-                  <Bar dataKey="MORNING" name="กะเช้า" fill="#22c55e" radius={[6,6,0,0]} />
-                  <Bar dataKey="NIGHT" name="กะดึก" fill="#3b82f6" radius={[6,6,0,0]} />
+                  <Bar
+                    dataKey="MORNING"
+                    name="กะเช้า"
+                    fill="#22c55e"
+                    radius={[6, 6, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="NIGHT"
+                    name="กะดึก"
+                    fill="#3b82f6"
+                    radius={[6, 6, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             );
