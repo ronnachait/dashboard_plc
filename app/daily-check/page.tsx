@@ -147,7 +147,7 @@ export default function DailyCheckPage() {
   const handleCopy = () => {
     if (!data) return;
 
-    const targetHours = 8;
+    const targetHours = 9;
 
     const hourPercent = ((data.totalHours / targetHours) * 100).toFixed(0);
 

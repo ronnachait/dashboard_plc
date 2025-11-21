@@ -23,10 +23,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const accessToken = await getValidAccessToken(user.id);
@@ -82,12 +79,12 @@ export async function POST(req: Request) {
         const link = res.data.webViewLink ?? "";
 
         // ✅ ตรวจสอบว่าเป็นวิดีโอหรือรูป
-        const isVideo = value.type.startsWith('video/');
-        
+        const isVideo = value.type.startsWith("video/");
+
         // ✅ ฝังสูตร - วิดีโอใช้ HYPERLINK อย่างเดียว, รูปใช้ image() + HYPERLINK
         const formula = fileId
           ? isVideo
-            ? `=HYPERLINK("${link}", "🎬 ${value.name}")`
+            ? `=HYPERLINK("${link}",image("https://lh3.google.com/u/0/d/${fileId}", 4, 100, 100))`
             : `=HYPERLINK("${link}", image("https://lh3.google.com/u/0/d/${fileId}", 4, 100, 100))`
           : "No File";
 
@@ -99,7 +96,7 @@ export async function POST(req: Request) {
     const now = new Date();
     const dateStr = now.toLocaleDateString("en-US"); // MM/DD/YYYY (ค.ศ.)
     const timeStr = now.toLocaleTimeString("en-US", { hour12: false }); // HH:MM:SS (24hr)
-    
+
     const values = [
       [
         "",
@@ -144,7 +141,11 @@ export async function POST(req: Request) {
         err.message.includes("invalid_grant"))
     ) {
       return NextResponse.json(
-        { success: false, error: "Google authentication required", needAuth: true },
+        {
+          success: false,
+          error: "Google authentication required",
+          needAuth: true,
+        },
         { status: 401 }
       );
     }

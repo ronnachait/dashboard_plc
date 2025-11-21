@@ -17,9 +17,9 @@ export async function GET(req: Request) {
 
     // ✅ ช่วงเวลาแต่ละกะ
     const startDayShift = new Date(`${dateParam}T08:30:00`);
-    const endDayShift = new Date(`${dateParam}T20:30:00`);
+    const endDayShift = new Date(`${dateParam}T21:00:00`);
 
-    const startNightShift = new Date(`${dateParam}T20:30:00`);
+    const startNightShift = new Date(`${dateParam}T21:00:00`);
     const endNightShift = new Date(baseDate);
     endNightShift.setDate(baseDate.getDate() + 1);
     endNightShift.setHours(8, 30, 0, 0);

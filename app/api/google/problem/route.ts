@@ -33,10 +33,7 @@ export async function GET(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const accessToken = await getValidAccessToken(user.id);
@@ -45,109 +42,109 @@ export async function GET(req: Request) {
     auth.setCredentials({ access_token: accessToken });
     const sheets = google.sheets({ version: "v4", auth });
 
-  // ✅ เริ่มที่ B9 (ข้อมูลจริง)
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.NEXT_PUBLIC_SHEET_ID!,
-    range: "4_Problem!B9:P",
-  });
+    // ✅ เริ่มที่ B9 (ข้อมูลจริง)
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.NEXT_PUBLIC_SHEET_ID!,
+      range: "4_Problem!B9:P",
+    });
 
-  const rows = res.data.values;
-  console.log("📄 Total rows fetched:", rows?.length || 0);
+    const rows = res.data.values;
+    console.log("📄 Total rows fetched:", rows?.length || 0);
 
-  if (!rows || rows.length === 0)
-    return NextResponse.json({ error: "No problem data" });
+    if (!rows || rows.length === 0)
+      return NextResponse.json({ error: "No problem data" });
 
-  function formatDate(d: string): string {
-    if (d.includes("/")) {
-      const parts = d.split("/");
-      if (parseInt(parts[0]) > 12) {
-        // DD/MM/YYYY
-        const [day, month, year] = parts;
-        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      } else {
-        // MM/DD/YYYY
-        const [month, day, year] = parts;
-        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    function formatDate(d: string): string {
+      if (d.includes("/")) {
+        const parts = d.split("/");
+        if (parseInt(parts[0]) > 12) {
+          // DD/MM/YYYY
+          const [day, month, year] = parts;
+          return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        } else {
+          // MM/DD/YYYY
+          const [month, day, year] = parts;
+          return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        }
+      } else if (d.includes("-")) {
+        const [day, month, year] = d.split("-");
+        return `20${year}-${month}-${day}`;
       }
-    } else if (d.includes("-")) {
-      const [day, month, year] = d.split("-");
-      return `20${year}-${month}-${day}`;
-    }
-    return d;
-  }
-
-  const dayStart = new Date(`${formatDate(dateParam)}T08:30:00`);
-  const dayEnd = new Date(`${formatDate(dateParam)}T20:30:00`);
-  const nightStart = dayEnd;
-  const nightEnd = new Date(dayStart);
-  nightEnd.setDate(dayStart.getDate() + 1);
-  nightEnd.setHours(8, 30, 0, 0);
-  const filtered = rows.filter((r, i) => {
-    const dateCell = r[0];
-    const timeCell = r[1];
-
-    // ❌ ข้ามแถวว่างหรือหัวตาราง
-    if (
-      !dateCell ||
-      !timeCell ||
-      dateCell === "วันที่เจอปัญหา" ||
-      dateCell === "Registration Date" ||
-      String(timeCell).trim() === "-" ||
-      String(timeCell).trim() === "--"
-    ) {
-      console.warn(`⚠️ Skipped row ${i}: invalid or header data ->`, r);
-      return false;
+      return d;
     }
 
-    // ✅ แปลงวันที่
-    const dateStr = formatDate(dateCell);
+    const dayStart = new Date(`${formatDate(dateParam)}T08:30:00`);
+    const dayEnd = new Date(`${formatDate(dateParam)}T21:00:00`);
+    const nightStart = dayEnd;
+    const nightEnd = new Date(dayStart);
+    nightEnd.setDate(dayStart.getDate() + 1);
+    nightEnd.setHours(8, 30, 0, 0);
+    const filtered = rows.filter((r, i) => {
+      const dateCell = r[0];
+      const timeCell = r[1];
 
-    // ✅ แปลงเวลา (รองรับทั้ง text และ number)
-    let timeStr = "";
-    if (typeof timeCell === "number") {
-      // Excel serial (เช่น 0.25 = 06:00)
-      const d = new Date((timeCell - 25569) * 86400 * 1000);
-      timeStr = d.toISOString().substring(11, 16);
-    } else {
-      // Text เช่น "6:7", "06:07", "13:42"
-      const t = String(timeCell).trim();
-      const match = t.match(/^(\d{1,2}):(\d{1,2})/);
-      if (!match) {
-        console.warn(`⚠️ Invalid time format at row ${i}:`, timeCell);
+      // ❌ ข้ามแถวว่างหรือหัวตาราง
+      if (
+        !dateCell ||
+        !timeCell ||
+        dateCell === "วันที่เจอปัญหา" ||
+        dateCell === "Registration Date" ||
+        String(timeCell).trim() === "-" ||
+        String(timeCell).trim() === "--"
+      ) {
+        console.warn(`⚠️ Skipped row ${i}: invalid or header data ->`, r);
         return false;
       }
-      timeStr = `${match[1].padStart(2, "0")}:${match[2].padStart(2, "0")}`;
-    }
 
-    // ✅ สร้าง datetime ปลอดภัย
-    const dt = new Date(`${dateStr}T${timeStr}:00`);
-    if (isNaN(dt.getTime())) {
-      console.warn(`⚠️ Invalid date/time at row ${i}:`, dateCell, timeCell);
-      return false;
-    }
+      // ✅ แปลงวันที่
+      const dateStr = formatDate(dateCell);
 
-    console.log(`🧩 Parsed ${dateCell} ${timeCell} -> ${dt.toISOString()}`);
+      // ✅ แปลงเวลา (รองรับทั้ง text และ number)
+      let timeStr = "";
+      if (typeof timeCell === "number") {
+        // Excel serial (เช่น 0.25 = 06:00)
+        const d = new Date((timeCell - 25569) * 86400 * 1000);
+        timeStr = d.toISOString().substring(11, 16);
+      } else {
+        // Text เช่น "6:7", "06:07", "13:42"
+        const t = String(timeCell).trim();
+        const match = t.match(/^(\d{1,2}):(\d{1,2})/);
+        if (!match) {
+          console.warn(`⚠️ Invalid time format at row ${i}:`, timeCell);
+          return false;
+        }
+        timeStr = `${match[1].padStart(2, "0")}:${match[2].padStart(2, "0")}`;
+      }
 
-    // ✅ กรองตาม shift
-    return shift === "day"
-      ? dt >= dayStart && dt < dayEnd
-      : dt >= nightStart && dt < nightEnd;
-  });
+      // ✅ สร้าง datetime ปลอดภัย
+      const dt = new Date(`${dateStr}T${timeStr}:00`);
+      if (isNaN(dt.getTime())) {
+        console.warn(`⚠️ Invalid date/time at row ${i}:`, dateCell, timeCell);
+        return false;
+      }
 
-  const problems = filtered.map((r) => ({
-    date: r[0],
-    time: r[1],
-    hour: r[2],
-    reporter: r[3],
-    section: r[4],
-    partNo: r[5],
-    partName: r[6],
-    status: r[7],
-    problemType: r[10],
-    action: r[11],
-    detail: r[12],
-    cause: r[13],
-  }));
+      console.log(`🧩 Parsed ${dateCell} ${timeCell} -> ${dt.toISOString()}`);
+
+      // ✅ กรองตาม shift
+      return shift === "day"
+        ? dt >= dayStart && dt < dayEnd
+        : dt >= nightStart && dt < nightEnd;
+    });
+
+    const problems = filtered.map((r) => ({
+      date: r[0],
+      time: r[1],
+      hour: r[2],
+      reporter: r[3],
+      section: r[4],
+      partNo: r[5],
+      partName: r[6],
+      status: r[7],
+      problemType: r[10],
+      action: r[11],
+      detail: r[12],
+      cause: r[13],
+    }));
 
     console.log("✅ Problems found:", problems.length);
 
